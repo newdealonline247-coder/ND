@@ -49,6 +49,7 @@ interface Trade {
   totalSeconds: number;
   status: 'OPEN' | 'WIN' | 'LOSS';
   createdAt: string;
+  topOffsetPercent: number; // Positioning line on chart
 }
 
 export default function TerminalPage() {
@@ -72,7 +73,7 @@ export default function TerminalPage() {
         prevTrades.forEach((trade) => {
           if (trade.remainingSeconds <= 1) {
             // Trade expired -> resolve Win/Loss
-            const isWin = Math.random() > 0.42; // ~58% win rate simulator
+            const isWin = Math.random() > 0.42; // ~58% win simulator
             const resolvedTrade: Trade = {
               ...trade,
               remainingSeconds: 0,
@@ -117,6 +118,7 @@ export default function TerminalPage() {
     setBalance((prev) => prev - amount);
 
     const payoutAmount = Number((amount * (1 + selectedAsset.payout / 100)).toFixed(2));
+    const randomChartY = 35 + ((activeTrades.length * 12) % 35); // Stagger line position on chart
 
     const newTrade: Trade = {
       id: Math.random().toString(36).substring(2, 9),
@@ -129,6 +131,7 @@ export default function TerminalPage() {
       totalSeconds: seconds,
       status: 'OPEN',
       createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      topOffsetPercent: randomChartY,
     };
 
     setActiveTrades((prev) => [newTrade, ...prev]);
@@ -212,8 +215,6 @@ export default function TerminalPage() {
 
         {/* ── TOP HEADER ── */}
         <header className="h-12 bg-[#0f141b] border-b border-[#1a2030] px-3 flex items-center justify-between shrink-0 relative z-40">
-          
-          {/* Asset Dropdown */}
           <div className="relative">
             <button
               onClick={() => setAssetOpen(!assetOpen)}
@@ -256,7 +257,6 @@ export default function TerminalPage() {
             )}
           </div>
 
-          {/* Logo Title */}
           <div className="hidden md:flex items-center gap-1.5 opacity-60">
             <div className="w-5 h-5 rounded bg-[#b6ff3b] flex items-center justify-center">
               <span className="text-black font-black text-xs">×</span>
@@ -264,7 +264,6 @@ export default function TerminalPage() {
             <span className="text-[11px] font-bold tracking-[0.15em] text-[#b6ff3b]">EXPIRY<span className="text-white">CAPITAL</span></span>
           </div>
 
-          {/* Balance Controls */}
           <div className="flex items-center gap-2">
             <div className="flex bg-[#151b26] border border-[#1e2636] rounded-lg p-0.5 h-8">
               <button
@@ -316,7 +315,6 @@ export default function TerminalPage() {
                 <span className="text-xs text-[#6b7280]">{activeTrades.length} Open</span>
               </div>
 
-              {/* Active Trades */}
               <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                 <div className="text-[10px] font-bold text-[#6b7280] uppercase tracking-wider">Active Trades</div>
                 {activeTrades.length === 0 ? (
@@ -349,7 +347,6 @@ export default function TerminalPage() {
                   ))
                 )}
 
-                {/* Closed History */}
                 <div className="text-[10px] font-bold text-[#6b7280] uppercase tracking-wider pt-4">Recent History</div>
                 {closedTrades.map((t) => (
                   <div key={t.id} className="bg-[#151b26]/60 border border-[#1e2636]/60 rounded-xl p-2.5 flex items-center justify-between">
@@ -369,9 +366,45 @@ export default function TerminalPage() {
             </div>
           )}
 
-          {/* REAL TRADINGVIEW CHART CANVAS */}
-          <div className="flex-1 relative bg-[#080c11]">
+          {/* REAL TRADINGVIEW CHART CANVAS & OVERLAY */}
+          <div className="flex-1 relative bg-[#080c11] overflow-hidden">
             <TradingViewChart symbol={selectedAsset.symbol} />
+
+            {/* ON-CHART LIVE TRADES OVERLAY */}
+            <div className="absolute inset-0 pointer-events-none z-10">
+              {activeTrades.map((t) => (
+                <div
+                  key={t.id}
+                  className="absolute left-0 right-0 flex items-center transition-all duration-500"
+                  style={{ top: `${t.topOffsetPercent}%` }}
+                >
+                  {/* Dashed entry line across chart */}
+                  <div
+                    className={`flex-1 border-b-2 border-dashed ${
+                      t.direction === 'BUY' ? 'border-[#22c55e]' : 'border-[#ef4444]'
+                    }`}
+                  />
+
+                  {/* Trade details badge over chart */}
+                  <div
+                    className={`mr-16 px-3 py-1.5 rounded-xl border shadow-2xl flex items-center gap-2 pointer-events-auto backdrop-blur-md animate-pulse ${
+                      t.direction === 'BUY'
+                        ? 'bg-[#14261d]/90 border-[#22c55e] text-[#22c55e]'
+                        : 'bg-[#2b1618]/90 border-[#ef4444] text-[#ef4444]'
+                    }`}
+                  >
+                    <div className="w-2 h-2 rounded-full bg-current animate-ping" />
+                    <span className="font-extrabold text-xs uppercase flex items-center gap-0.5">
+                      {t.direction === 'BUY' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                      ${t.amount}
+                    </span>
+                    <span className="font-mono text-xs font-black bg-black/60 px-2 py-0.5 rounded-md text-white border border-white/10">
+                      {formatTime(t.remainingSeconds)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* ══════ RIGHT TRADE PANEL ══════ */}
