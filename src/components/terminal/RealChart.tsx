@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { 
   createChart, ColorType, LineStyle, IPriceLine, ISeriesApi, 
-  CandlestickSeries, AreaSeries, LineSeries 
+  CandlestickSeries, AreaSeries, LineSeries, UTCTimestamp 
 } from 'lightweight-charts';
 
 interface Trade {
@@ -93,33 +93,36 @@ export default function RealChart({ symbol, trades, chartType, showSMA, onPriceT
       smaSeriesRef.current = smaSeries;
     }
 
+    const CANDLE_DURATION = 2; // 2 second candles
     const now = Math.floor(Date.now() / 1000);
+    const startTime = Math.floor(now / CANDLE_DURATION) * CANDLE_DURATION - (100 * CANDLE_DURATION);
+    
     const initialData = [];
     const smaData = [];
-    let price = basePrice;
+    let lastClose = basePrice;
 
-    for (let i = 120; i >= 0; i--) {
-      const open = price;
-      const volatility = basePrice * 0.0003;
-      const change = (Math.random() - 0.495) * volatility;
+    for (let i = 0; i < 100; i++) {
+      const cTime = (startTime + i * CANDLE_DURATION) as UTCTimestamp;
+      const open = lastClose;
+      const volatility = basePrice * 0.00015;
+      const change = (Math.random() - 0.49) * volatility;
       const close = Number((open + change).toFixed(5));
-      const high = Number((Math.max(open, close) + Math.random() * volatility * 0.5).toFixed(5));
-      const low = Number((Math.min(open, close) - Math.random() * volatility * 0.5).toFixed(5));
-      price = close;
-
-      const time = (now - i) as any;
+      const high = Number((Math.max(open, close) + Math.random() * volatility * 0.3).toFixed(5));
+      const low = Number((Math.min(open, close) - Math.random() * volatility * 0.3).toFixed(5));
+      lastClose = close;
 
       if (chartType === 'candlestick') {
-        initialData.push({ time, open, high, low, close });
+        initialData.push({ time: cTime, open, high, low, close });
       } else {
-        initialData.push({ time, value: close });
+        initialData.push({ time: cTime, value: close });
       }
 
       if (showSMA) {
-        smaData.push({ time, value: Number((close * 0.9998).toFixed(5)) });
+        smaData.push({ time: cTime, value: Number((close * 0.9998).toFixed(5)) });
       }
     }
 
+    currentPriceRef.current = lastClose;
     mainSeries.setData(initialData);
     if (showSMA && smaSeriesRef.current) {
       smaSeriesRef.current.setData(smaData);
@@ -127,44 +130,56 @@ export default function RealChart({ symbol, trades, chartType, showSMA, onPriceT
 
     chart.timeScale().fitContent();
 
-    let currentCandleOpen = price;
-    let currentCandleHigh = price;
-    let currentCandleLow = price;
+    // Proper Candle Bucket Ticker
+    let activeCandleTime = (Math.floor(now / CANDLE_DURATION) * CANDLE_DURATION) as UTCTimestamp;
+    let activeCandle = {
+      time: activeCandleTime,
+      open: lastClose,
+      high: lastClose,
+      low: lastClose,
+      close: lastClose,
+    };
 
     const interval = setInterval(() => {
-      const volatility = basePrice * 0.0002;
+      const nowSec = Math.floor(Date.now() / 1000);
+      const currentBucketTime = (Math.floor(nowSec / CANDLE_DURATION) * CANDLE_DURATION) as UTCTimestamp;
+
+      const volatility = basePrice * 0.00012;
       const change = (Math.random() - 0.495) * volatility;
       currentPriceRef.current = Number((currentPriceRef.current + change).toFixed(5));
 
-      currentCandleHigh = Math.max(currentCandleHigh, currentPriceRef.current);
-      currentCandleLow = Math.min(currentCandleLow, currentPriceRef.current);
-
-      const tickTime = Math.floor(Date.now() / 1000) as any;
+      if (currentBucketTime !== activeCandleTime) {
+        // New Candle starts at previous close
+        activeCandleTime = currentBucketTime;
+        activeCandle = {
+          time: currentBucketTime,
+          open: currentPriceRef.current,
+          high: currentPriceRef.current,
+          low: currentPriceRef.current,
+          close: currentPriceRef.current,
+        };
+      } else {
+        // Update current candle OHLC
+        activeCandle.high = Math.max(activeCandle.high, currentPriceRef.current);
+        activeCandle.low = Math.min(activeCandle.low, currentPriceRef.current);
+        activeCandle.close = currentPriceRef.current;
+      }
 
       if (chartType === 'candlestick') {
-        mainSeries.update({
-          time: tickTime,
-          open: currentCandleOpen,
-          high: currentCandleHigh,
-          low: currentCandleLow,
-          close: currentPriceRef.current,
-        });
+        mainSeries.update(activeCandle);
       } else {
-        mainSeries.update({
-          time: tickTime,
-          value: currentPriceRef.current,
-        });
+        mainSeries.update({ time: currentBucketTime, value: currentPriceRef.current });
       }
 
       if (showSMA && smaSeriesRef.current) {
         smaSeriesRef.current.update({
-          time: tickTime,
+          time: currentBucketTime,
           value: Number((currentPriceRef.current * 0.9998).toFixed(5)),
         });
       }
 
       onPriceTick(currentPriceRef.current);
-    }, 400);
+    }, 300);
 
     return () => {
       clearInterval(interval);
