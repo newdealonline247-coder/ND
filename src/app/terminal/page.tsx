@@ -18,7 +18,8 @@ import {
   XCircle,
   BarChart2,
   DollarSign,
-  Info
+  Info,
+  Timer
 } from 'lucide-react';
 
 const TradingViewChart = dynamic(
@@ -72,11 +73,25 @@ export default function TerminalPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'win' | 'loss' | 'info' } | null>(null);
   const [currentPrice, setCurrentPrice] = useState(1.33903);
+  const [candleSecondsLeft, setCandleSecondsLeft] = useState(60);
 
   const currentPriceRef = useRef(currentPrice);
   useEffect(() => {
     currentPriceRef.current = currentPrice;
   }, [currentPrice]);
+
+  // Candle Countdown Engine (1m Candle Sync)
+  useEffect(() => {
+    const updateCandleCountdown = () => {
+      const now = Math.floor(Date.now() / 1000);
+      const secondsInCurrentMinute = now % 60;
+      setCandleSecondsLeft(60 - secondsInCurrentMinute);
+    };
+
+    updateCandleCountdown();
+    const interval = setInterval(updateCandleCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Live Price Simulation Loop
   useEffect(() => {
@@ -100,17 +115,14 @@ export default function TerminalPage() {
       return;
     }
 
-    // Deduct Balance Immediately
     setBalance(prev => parseFloat((prev - investment).toFixed(2)));
 
-    // Instant Feedback Toast
     setNotification({
       message: `ORDER PLACED: ${type.toUpperCase()} $${investment} on ${selectedAsset.name}`,
       type: 'info'
     });
     setTimeout(() => setNotification(null), 2500);
 
-    // Create Active Order
     const now = Date.now();
     const newTrade: ActiveTrade = {
       id: Math.random().toString(36).substring(2, 9),
@@ -392,6 +404,18 @@ export default function TerminalPage() {
         <div className="relative flex-1 bg-[#080c11] z-0">
           <TradingViewChart symbol={selectedAsset.symbol} />
 
+          {/* CANDLE COUNTDOWN OVERLAY BADGE */}
+          <div className="absolute top-4 left-4 z-20 bg-[#0b1017]/90 border border-gray-800 backdrop-blur-md px-3.5 py-1.5 rounded-xl flex items-center space-x-2.5 shadow-xl">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#b6ff3b] animate-ping"></span>
+            <div className="flex items-center space-x-1.5 text-xs">
+              <Timer size={14} className="text-gray-400" />
+              <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider">CANDLE CLOSE:</span>
+              <span className="text-[#b6ff3b] font-mono font-black text-xs">
+                00:{candleSecondsLeft.toString().padStart(2, '0')}
+              </span>
+            </div>
+          </div>
+
           <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
             {activeTrades.map((trade, idx) => {
               const topOffset = 25 + (idx * 65);
@@ -429,7 +453,7 @@ export default function TerminalPage() {
           </div>
         </div>
 
-        {/* RIGHT CONTROL PANEL - GUARANTEED STACKING ORDER */}
+        {/* RIGHT CONTROL PANEL */}
         <div className="relative z-30 w-[300px] border-l border-gray-800 bg-[#0b1017] flex flex-col p-4 shrink-0">
           <div className="space-y-5">
 
