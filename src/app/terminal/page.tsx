@@ -35,7 +35,8 @@ interface ActiveTrade {
   amount: number;
   expiryTime: number;
   timeLeft: number;
-  asset: string;
+  assetSymbol: string;
+  assetName: string;
   payoutRate: number;
 }
 
@@ -74,20 +75,21 @@ export default function TerminalPage() {
   const [tradeHistory, setTradeHistory] = useState<SettledTrade[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'win' | 'loss' | 'info' } | null>(null);
-  
-  const [currentPrice, setCurrentPrice] = useState(selectedAsset.basePrice);
-  const [priceDirection, setPriceDirection] = useState<'up' | 'down' | 'neutral'>('up');
+
+  // Independent live price tracking for EVERY asset
+  const [prices, setPrices] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    ASSETS.forEach(a => { initial[a.symbol] = a.basePrice; });
+    return initial;
+  });
+
+  const [priceDirections, setPriceDirections] = useState<Record<string, 'up' | 'down'>>({});
   const [candleSecondsLeft, setCandleSecondsLeft] = useState(60);
 
-  const currentPriceRef = useRef(currentPrice);
+  const pricesRef = useRef(prices);
   useEffect(() => {
-    currentPriceRef.current = currentPrice;
-  }, [currentPrice]);
-
-  // Sync Live Price when asset changes
-  useEffect(() => {
-    setCurrentPrice(selectedAsset.basePrice);
-  }, [selectedAsset]);
+    pricesRef.current = prices;
+  }, [prices]);
 
   // Candle Countdown Engine
   useEffect(() => {
@@ -101,24 +103,32 @@ export default function TerminalPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Micro-tick Price Engine
+  // Micro-tick Unbiased Random Walk Simulation for ALL Assets Simultaneously
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentPrice(prev => {
-        const isCryptoOrGold = selectedAsset.symbol.includes('CRYPTO') || selectedAsset.symbol.includes('XAU');
-        const scale = isCryptoOrGold ? 0.25 : 0.00008;
-        const change = (Math.random() - 0.495) * scale;
-        const nextPrice = parseFloat((prev + change).toFixed(isCryptoOrGold ? 2 : 5));
-        
-        if (nextPrice > prev) setPriceDirection('up');
-        else if (nextPrice < prev) setPriceDirection('down');
+      setPrices(prevPrices => {
+        const nextPrices = { ...prevPrices };
+        const nextDirections: Record<string, 'up' | 'down'> = {};
 
-        return nextPrice;
+        ASSETS.forEach(asset => {
+          const current = prevPrices[asset.symbol] || asset.basePrice;
+          const isCryptoOrGold = asset.symbol.includes('CRYPTO') || asset.symbol.includes('XAU');
+          const scale = isCryptoOrGold ? 0.35 : 0.00008;
+          // Unbiased 50/50 random step (-0.5 to +0.5)
+          const change = (Math.random() - 0.5) * scale;
+          const updated = parseFloat((current + change).toFixed(isCryptoOrGold ? 2 : 5));
+
+          nextPrices[asset.symbol] = updated;
+          nextDirections[asset.symbol] = updated >= current ? 'up' : 'down';
+        });
+
+        setPriceDirections(nextDirections);
+        return nextPrices;
       });
     }, 400);
 
     return () => clearInterval(interval);
-  }, [selectedAsset]);
+  }, []);
 
   // Execute Order
   const handleTrade = (type: 'up' | 'down') => {
@@ -131,22 +141,25 @@ export default function TerminalPage() {
       return;
     }
 
+    const tradeEntryPrice = pricesRef.current[selectedAsset.symbol] || selectedAsset.basePrice;
+
     setBalance(prev => parseFloat((prev - investment).toFixed(2)));
 
     const now = Date.now();
     const newTrade: ActiveTrade = {
       id: Math.random().toString(36).substring(2, 9),
       type,
-      entryPrice: currentPriceRef.current,
+      entryPrice: tradeEntryPrice,
       amount: investment,
       expiryTime: now + duration * 1000,
       timeLeft: duration,
-      asset: selectedAsset.name,
+      assetSymbol: selectedAsset.symbol,
+      assetName: selectedAsset.name,
       payoutRate: selectedAsset.payout,
     };
 
     setNotification({
-      message: `ORDER PLACED: ${type.toUpperCase()} @ ${newTrade.entryPrice}`,
+      message: `ORDER PLACED: ${type.toUpperCase()} @ ${tradeEntryPrice} (${selectedAsset.name})`,
       type: 'info'
     });
     setTimeout(() => setNotification(null), 2000);
@@ -158,7 +171,6 @@ export default function TerminalPage() {
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now();
-      const latestPrice = currentPriceRef.current;
 
       setActiveTrades(prevTrades => {
         const remaining: ActiveTrade[] = [];
@@ -167,9 +179,15 @@ export default function TerminalPage() {
           const secondsLeft = Math.max(0, Math.ceil((trade.expiryTime - now) / 1000));
 
           if (secondsLeft <= 0) {
-            const exitPrice = latestPrice;
+            // Get live exit price for THIS specific trade's asset
+            const exitPrice = pricesRef.current[trade.assetSymbol] || trade.entryPrice;
             const isTie = exitPrice === trade.entryPrice;
-            const won = !isTie && (trade.type === 'up' ? exitPrice > trade.entryPrice : exitPrice < trade.entryPrice);
+            const won = !isTie && (
+              trade.type === 'up'
+                ? exitPrice > trade.entryPrice
+                : exitPrice < trade.entryPrice
+            );
+
             const payout = won ? trade.amount + (trade.amount * trade.payoutRate) : isTie ? trade.amount : 0;
 
             if (won) {
@@ -200,7 +218,7 @@ export default function TerminalPage() {
               payout,
               won,
               isTie,
-              asset: trade.asset,
+              asset: trade.assetName,
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
             }, ...h]);
 
@@ -222,6 +240,9 @@ export default function TerminalPage() {
     setNotification({ message: 'Balance reset to $10,000.00', type: 'win' });
     setTimeout(() => setNotification(null), 3000);
   };
+
+  const currentPrice = prices[selectedAsset.symbol] || selectedAsset.basePrice;
+  const currentDirection = priceDirections[selectedAsset.symbol] || 'up';
 
   return (
     <div className="flex flex-col h-screen bg-[#080c11] text-gray-300 font-sans overflow-hidden select-none">
@@ -423,7 +444,6 @@ export default function TerminalPage() {
 
         {/* CHART AREA WITH BADGES OVERLAY */}
         <div className="relative flex-1 bg-[#080c11] z-0">
-          {/* RE-MOUNTS ON ASSET CHANGE TO MATCH CHART WITH TICKER */}
           <TradingViewChart key={selectedAsset.symbol} symbol={selectedAsset.symbol} />
 
           {/* CANDLE COUNTDOWN OVERLAY BADGE */}
@@ -442,11 +462,12 @@ export default function TerminalPage() {
           <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
             {activeTrades.map((trade, idx) => {
               const topOffset = 25 + (idx * 75);
-              const isTie = currentPrice === trade.entryPrice;
+              const liveTradeAssetPrice = prices[trade.assetSymbol] || trade.entryPrice;
+              const isTie = liveTradeAssetPrice === trade.entryPrice;
               const isWinningCurrently = !isTie && (
-                trade.type === 'up' 
-                  ? currentPrice > trade.entryPrice 
-                  : currentPrice < trade.entryPrice
+                trade.type === 'up'
+                  ? liveTradeAssetPrice > trade.entryPrice
+                  : liveTradeAssetPrice < trade.entryPrice
               );
 
               return (
@@ -473,7 +494,7 @@ export default function TerminalPage() {
                     </div>
 
                     <div>
-                      <div className="text-[10px] font-extrabold uppercase tracking-wider text-gray-300">{trade.asset}</div>
+                      <div className="text-[10px] font-extrabold uppercase tracking-wider text-gray-300">{trade.assetName}</div>
                       <div className="text-xs font-mono font-bold text-white flex items-center space-x-1">
                         <span>Entry:</span>
                         <span className={isWinningCurrently ? 'text-[#b6ff3b]' : 'text-red-300'}>{trade.entryPrice}</span>
@@ -504,7 +525,7 @@ export default function TerminalPage() {
                 <span>Live Price</span>
               </div>
               <div className={`text-xl font-mono font-black transition-colors ${
-                priceDirection === 'up' ? 'text-[#10b981]' : 'text-[#ef4444]'
+                currentDirection === 'up' ? 'text-[#10b981]' : 'text-[#ef4444]'
               }`}>
                 {currentPrice}
               </div>
