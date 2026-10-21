@@ -53,8 +53,8 @@ interface SettledTrade {
 }
 
 const ASSETS = [
-  { symbol: 'FX:GBPUSD', name: 'GBP/USD OTC', payout: 0.88, basePrice: 1.26540 },
-  { symbol: 'FX:EURUSD', name: 'EUR/USD OTC', payout: 0.92, basePrice: 1.08450 },
+  { symbol: 'FX:GBPUSD', name: 'GBP/USD OTC', payout: 0.88, basePrice: 1.26520 },
+  { symbol: 'FX:EURUSD', name: 'EUR/USD OTC', payout: 0.92, basePrice: 1.33910 },
   { symbol: 'FX:USDTRY', name: 'USD/TRY OTC', payout: 0.85, basePrice: 32.1450 },
   { symbol: 'FX:USDCAD', name: 'USD/CAD OTC', payout: 0.87, basePrice: 1.35820 },
   { symbol: 'FX:AUDUSD', name: 'AUD/USD OTC', payout: 0.86, basePrice: 0.65410 },
@@ -84,6 +84,7 @@ export default function TerminalPage() {
     currentPriceRef.current = currentPrice;
   }, [currentPrice]);
 
+  // Sync Live Price when asset changes
   useEffect(() => {
     setCurrentPrice(selectedAsset.basePrice);
   }, [selectedAsset]);
@@ -422,7 +423,8 @@ export default function TerminalPage() {
 
         {/* CHART AREA WITH BADGES OVERLAY */}
         <div className="relative flex-1 bg-[#080c11] z-0">
-          <TradingViewChart symbol={selectedAsset.symbol} />
+          {/* RE-MOUNTS ON ASSET CHANGE TO MATCH CHART WITH TICKER */}
+          <TradingViewChart key={selectedAsset.symbol} symbol={selectedAsset.symbol} />
 
           {/* CANDLE COUNTDOWN OVERLAY BADGE */}
           <div className="absolute top-4 left-4 z-20 bg-[#0b1017]/90 border border-gray-800 backdrop-blur-md px-3.5 py-1.5 rounded-xl flex items-center space-x-2.5 shadow-xl">
@@ -460,7 +462,6 @@ export default function TerminalPage() {
                   style={{ top: `${topOffset}px` }}
                 >
                   <div className="flex items-center space-x-2.5">
-                    {/* DYNAMIC ICON BOX */}
                     <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-extrabold text-white transition-colors duration-300 ${
                       isTie
                         ? 'bg-gray-600'
@@ -480,7 +481,6 @@ export default function TerminalPage() {
                     </div>
                   </div>
 
-                  {/* RIGHT COUNTDOWN DIVIDER */}
                   <div className="text-right border-l border-white/20 pl-4">
                     <div className="text-[9px] font-extrabold text-gray-400 uppercase tracking-widest">EXPIRY</div>
                     <div className="text-base font-mono font-black text-white">
