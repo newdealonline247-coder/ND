@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import {
   TrendingUp, TrendingDown, Clock, Wallet, User,
@@ -8,11 +8,11 @@ import {
   MessageCircle, HelpCircle, CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight, Layers
 } from 'lucide-react';
 
-const TradingViewChart = dynamic(() => import('@/components/terminal/TradingViewChart'), {
+const RealChart = dynamic(() => import('@/components/terminal/RealChart'), {
   ssr: false,
   loading: () => (
     <div className="w-full h-full flex items-center justify-center text-[#b6ff3b] font-mono text-sm animate-pulse bg-[#080c11]">
-      Loading Live Trading Engine...
+      Loading High-Precision Price Chart Engine...
     </div>
   ),
 });
@@ -27,15 +27,14 @@ interface Asset {
 }
 
 const ASSETS: Asset[] = [
-  { name: 'EUR/USD OTC', symbol: 'FX:EURUSD', flag1: '🇪🇺', flag2: '🇺🇸', payout: 95, category: 'OTC' },
-  { name: 'GBP/JPY OTC', symbol: 'FX:GBPJPY', flag1: '🇬🇧', flag2: '🇯🇵', payout: 93, category: 'OTC' },
-  { name: 'USD/TRY OTC', symbol: 'FX:USDTRY', flag1: '🇺🇸', flag2: '🇹🇷', payout: 94, category: 'OTC' },
-  { name: 'USD/CAD OTC', symbol: 'FX:USDCAD', flag1: '🇺🇸', flag2: '🇨🇦', payout: 91, category: 'OTC' },
-  { name: 'AUD/USD OTC', symbol: 'FX:AUDUSD', flag1: '🇦🇺', flag2: '🇺🇸', payout: 90, category: 'OTC' },
-  { name: 'EUR/GBP OTC', symbol: 'FX:EURGBP', flag1: '🇪🇺', flag2: '🇬🇧', payout: 89, category: 'OTC' },
-  { name: 'BTC/USDT OTC', symbol: 'BINANCE:BTCUSDT', flag1: '₿', flag2: '💵', payout: 90, category: 'CRYPTO' },
-  { name: 'ETH/USDT OTC', symbol: 'BINANCE:ETHUSDT', flag1: 'Ξ', flag2: '💵', payout: 88, category: 'CRYPTO' },
-  { name: 'GOLD (XAU/USD)', symbol: 'TVC:GOLD', flag1: '🥇', flag2: '💵', payout: 86, category: 'COMMODITIES' },
+  { name: 'EUR/USD OTC', symbol: 'EURUSD_OTC', flag1: '🇪🇺', flag2: '🇺🇸', payout: 95, category: 'OTC' },
+  { name: 'GBP/JPY OTC', symbol: 'GBPJPY_OTC', flag1: '🇬🇧', flag2: '🇯🇵', payout: 93, category: 'OTC' },
+  { name: 'USD/TRY OTC', symbol: 'USDTRY_OTC', flag1: '🇺🇸', flag2: '🇹🇷', payout: 94, category: 'OTC' },
+  { name: 'USD/CAD OTC', symbol: 'USDCAD_OTC', flag1: '🇺🇸', flag2: '🇨🇦', payout: 91, category: 'OTC' },
+  { name: 'AUD/USD OTC', symbol: 'AUDUSD_OTC', flag1: '🇦🇺', flag2: '🇺🇸', payout: 90, category: 'OTC' },
+  { name: 'BTC/USDT OTC', symbol: 'BTCUSDT_OTC', flag1: '₿', flag2: '💵', payout: 90, category: 'CRYPTO' },
+  { name: 'ETH/USDT OTC', symbol: 'ETHUSDT_OTC', flag1: 'Ξ', flag2: '💵', payout: 88, category: 'CRYPTO' },
+  { name: 'GOLD (XAU/USD)', symbol: 'XAUUSD', flag1: '🥇', flag2: '💵', payout: 86, category: 'COMMODITIES' },
 ];
 
 interface Trade {
@@ -43,13 +42,13 @@ interface Trade {
   assetName: string;
   direction: 'BUY' | 'SELL';
   amount: number;
+  strikePrice: number;
   payoutRate: number;
   payoutAmount: number;
   remainingSeconds: number;
   totalSeconds: number;
   status: 'OPEN' | 'WIN' | 'LOSS';
   createdAt: string;
-  topOffsetPercent: number; // Positioning line on chart
 }
 
 export default function TerminalPage() {
@@ -62,18 +61,26 @@ export default function TerminalPage() {
   const [activeTab, setActiveTab] = useState<'trade' | 'history'>('trade');
   const [activeTrades, setActiveTrades] = useState<Trade[]>([]);
   const [closedTrades, setClosedTrades] = useState<Trade[]>([]);
+  const [livePrice, setLivePrice] = useState<number>(1.08500);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-  // Countdown timer engine for active trades
-  useEffect(() => {
+  const handlePriceTick = useCallback((price: number) => {
+    setLivePrice(price);
+  }, []);
+
+  // Timer engine for active trades
+  useState(() => {
     const timer = setInterval(() => {
       setActiveTrades((prevTrades) => {
         const nextTrades: Trade[] = [];
 
         prevTrades.forEach((trade) => {
           if (trade.remainingSeconds <= 1) {
-            // Trade expired -> resolve Win/Loss
-            const isWin = Math.random() > 0.42; // ~58% win simulator
+            // Check win condition against live market price
+            const isWin = trade.direction === 'BUY' 
+              ? livePrice >= trade.strikePrice 
+              : livePrice <= trade.strikePrice;
+
             const resolvedTrade: Trade = {
               ...trade,
               remainingSeconds: 0,
@@ -82,11 +89,12 @@ export default function TerminalPage() {
 
             if (isWin) {
               setBalance((prev) => prev + trade.payoutAmount);
-              showNotification(`WIN +$${trade.payoutAmount.toFixed(2)} on ${trade.assetName}!`, 'success');
+              setNotification({ msg: `WIN +$${trade.payoutAmount.toFixed(2)} at ${livePrice}!`, type: 'success' });
             } else {
-              showNotification(`Trade expired (LOSS) -$${trade.amount.toFixed(2)}`, 'error');
+              setNotification({ msg: `Trade Expired (LOSS) -$${trade.amount.toFixed(2)}`, type: 'error' });
             }
 
+            setTimeout(() => setNotification(null), 3500);
             setClosedTrades((history) => [resolvedTrade, ...history]);
           } else {
             nextTrades.push({
@@ -101,41 +109,36 @@ export default function TerminalPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
-
-  const showNotification = (msg: string, type: 'success' | 'error') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3500);
-  };
+  });
 
   const handlePlaceTrade = (direction: 'BUY' | 'SELL') => {
     if (balance < amount) {
-      showNotification('Insufficient balance for this investment!', 'error');
+      setNotification({ msg: 'Insufficient balance!', type: 'error' });
+      setTimeout(() => setNotification(null), 3000);
       return;
     }
 
-    // Deduct amount immediately
     setBalance((prev) => prev - amount);
 
     const payoutAmount = Number((amount * (1 + selectedAsset.payout / 100)).toFixed(2));
-    const randomChartY = 35 + ((activeTrades.length * 12) % 35); // Stagger line position on chart
 
     const newTrade: Trade = {
       id: Math.random().toString(36).substring(2, 9),
       assetName: selectedAsset.name,
       direction,
       amount,
+      strikePrice: livePrice, // Exact entry price
       payoutRate: selectedAsset.payout,
       payoutAmount,
       remainingSeconds: seconds,
       totalSeconds: seconds,
       status: 'OPEN',
       createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      topOffsetPercent: randomChartY,
     };
 
     setActiveTrades((prev) => [newTrade, ...prev]);
-    showNotification(`Trade placed: ${direction} ${selectedAsset.name} for $${amount}`, 'success');
+    setNotification({ msg: `${direction} order opened @ ${livePrice}`, type: 'success' });
+    setTimeout(() => setNotification(null), 3000);
   };
 
   const formatTime = (s: number) => {
@@ -169,7 +172,7 @@ export default function TerminalPage() {
         <nav className="flex flex-col gap-1 flex-1">
           <button
             onClick={() => setActiveTab('trade')}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition relative ${
+            className={`w-10 h-10 rounded-xl flex items-center justify-center transition ${
               activeTab === 'trade' ? 'bg-[#1a2332] text-[#b6ff3b]' : 'text-[#6b7280] hover:text-white hover:bg-[#151b26]'
             }`}
           >
@@ -196,10 +199,7 @@ export default function TerminalPage() {
             { icon: MessageCircle, id: 'chat' },
             { icon: HelpCircle, id: 'help' },
           ].map(({ icon: Icon, id }) => (
-            <button
-              key={id}
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-[#6b7280] hover:text-white hover:bg-[#151b26] transition"
-            >
+            <button key={id} className="w-10 h-10 rounded-xl flex items-center justify-center text-[#6b7280] hover:text-white hover:bg-[#151b26] transition">
               <Icon size={18} strokeWidth={1.75} />
             </button>
           ))}
@@ -213,7 +213,7 @@ export default function TerminalPage() {
       {/* ══════ MAIN CONTENT ══════ */}
       <div className="flex-1 flex flex-col min-w-0">
 
-        {/* ── TOP HEADER ── */}
+        {/* TOP HEADER */}
         <header className="h-12 bg-[#0f141b] border-b border-[#1a2030] px-3 flex items-center justify-between shrink-0 relative z-40">
           <div className="relative">
             <button
@@ -301,10 +301,10 @@ export default function TerminalPage() {
           </div>
         </header>
 
-        {/* ── BODY ── */}
+        {/* BODY */}
         <div className="flex-1 flex min-h-0 relative">
 
-          {/* TRADES HISTORY DRAWER */}
+          {/* TRADES DRAWER */}
           {activeTab === 'history' && (
             <div className="absolute top-0 left-0 bottom-0 w-80 bg-[#0f141b] border-r border-[#1a2030] z-20 flex flex-col p-4 shadow-2xl">
               <div className="flex items-center justify-between pb-3 border-b border-[#1a2030] mb-3">
@@ -334,8 +334,8 @@ export default function TerminalPage() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-xs text-[#6b7280]">
+                        <span>Strike: <strong className="text-white font-mono">{t.strikePrice}</strong></span>
                         <span>Timer: <strong className="text-white font-mono">{formatTime(t.remainingSeconds)}</strong></span>
-                        <span className="text-[#22c55e] font-bold">+${t.payoutAmount.toFixed(2)}</span>
                       </div>
                       <div className="w-full bg-[#1e2636] h-1.5 rounded-full overflow-hidden">
                         <div
@@ -352,7 +352,7 @@ export default function TerminalPage() {
                   <div key={t.id} className="bg-[#151b26]/60 border border-[#1e2636]/60 rounded-xl p-2.5 flex items-center justify-between">
                     <div>
                       <div className="font-medium text-xs text-gray-300">{t.assetName}</div>
-                      <div className="text-[10px] text-[#6b7280]">{t.createdAt}</div>
+                      <div className="text-[10px] text-[#6b7280]">@ {t.strikePrice}</div>
                     </div>
                     <div className="text-right">
                       <div className={`font-bold text-xs ${t.status === 'WIN' ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
@@ -366,48 +366,18 @@ export default function TerminalPage() {
             </div>
           )}
 
-          {/* REAL TRADINGVIEW CHART CANVAS & OVERLAY */}
-          <div className="flex-1 relative bg-[#080c11] overflow-hidden">
-            <TradingViewChart symbol={selectedAsset.symbol} />
+          {/* REAL CHART CANVAS */}
+          <div className="flex-1 relative bg-[#080c11]">
+            <RealChart symbol={selectedAsset.symbol} trades={activeTrades} onPriceTick={handlePriceTick} />
 
-            {/* ON-CHART LIVE TRADES OVERLAY */}
-            <div className="absolute inset-0 pointer-events-none z-10">
-              {activeTrades.map((t) => (
-                <div
-                  key={t.id}
-                  className="absolute left-0 right-0 flex items-center transition-all duration-500"
-                  style={{ top: `${t.topOffsetPercent}%` }}
-                >
-                  {/* Dashed entry line across chart */}
-                  <div
-                    className={`flex-1 border-b-2 border-dashed ${
-                      t.direction === 'BUY' ? 'border-[#22c55e]' : 'border-[#ef4444]'
-                    }`}
-                  />
-
-                  {/* Trade details badge over chart */}
-                  <div
-                    className={`mr-16 px-3 py-1.5 rounded-xl border shadow-2xl flex items-center gap-2 pointer-events-auto backdrop-blur-md animate-pulse ${
-                      t.direction === 'BUY'
-                        ? 'bg-[#14261d]/90 border-[#22c55e] text-[#22c55e]'
-                        : 'bg-[#2b1618]/90 border-[#ef4444] text-[#ef4444]'
-                    }`}
-                  >
-                    <div className="w-2 h-2 rounded-full bg-current animate-ping" />
-                    <span className="font-extrabold text-xs uppercase flex items-center gap-0.5">
-                      {t.direction === 'BUY' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                      ${t.amount}
-                    </span>
-                    <span className="font-mono text-xs font-black bg-black/60 px-2 py-0.5 rounded-md text-white border border-white/10">
-                      {formatTime(t.remainingSeconds)}
-                    </span>
-                  </div>
-                </div>
-              ))}
+            {/* Price Badge */}
+            <div className="absolute top-4 left-4 pointer-events-none z-10 bg-[#0f141b]/90 border border-[#1e2636] rounded-xl px-3.5 py-2 shadow-2xl backdrop-blur">
+              <span className="text-[10px] text-[#6b7280] uppercase font-bold tracking-wider block">Live Price</span>
+              <span className="font-mono text-xl font-bold text-[#b6ff3b] tabular-nums">{livePrice}</span>
             </div>
           </div>
 
-          {/* ══════ RIGHT TRADE PANEL ══════ */}
+          {/* RIGHT TRADE PANEL */}
           <aside className="w-[280px] bg-[#0f141b] border-l border-[#1a2030] flex flex-col shrink-0">
             <div className="p-4 flex-1 flex flex-col gap-4">
 
