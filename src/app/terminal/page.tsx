@@ -390,7 +390,7 @@ export default function TerminalPage() {
 
         {/* CHART AREA WITH BADGES OVERLAY */}
         <div className="relative flex-1 bg-[#080c11] z-0">
-          <TradingViewChart asset={selectedAsset.symbol} />
+          <TradingViewChart symbol={selectedAsset.symbol} />
 
           <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
             {activeTrades.map((trade, idx) => {
