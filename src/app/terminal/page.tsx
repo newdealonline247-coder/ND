@@ -19,7 +19,8 @@ import {
   BarChart2,
   DollarSign,
   Info,
-  Timer
+  Timer,
+  Activity
 } from 'lucide-react';
 
 const TradingViewChart = dynamic(
@@ -46,19 +47,20 @@ interface SettledTrade {
   amount: number;
   payout: number;
   won: boolean;
+  isTie: boolean;
   asset: string;
   timestamp: string;
 }
 
 const ASSETS = [
-  { symbol: 'FX:GBPUSD', name: 'GBP/USD OTC', payout: 0.88 },
-  { symbol: 'FX:EURUSD', name: 'EUR/USD OTC', payout: 0.92 },
-  { symbol: 'FX:USDTRY', name: 'USD/TRY OTC', payout: 0.85 },
-  { symbol: 'FX:USDCAD', name: 'USD/CAD OTC', payout: 0.87 },
-  { symbol: 'FX:AUDUSD', name: 'AUD/USD OTC', payout: 0.86 },
-  { symbol: 'CRYPTO:BTCUSD', name: 'BTC/USDT OTC', payout: 0.90 },
-  { symbol: 'CRYPTO:ETHUSD', name: 'ETH/USDT OTC', payout: 0.89 },
-  { symbol: 'OANDA:XAUUSD', name: 'GOLD OTC', payout: 0.95 },
+  { symbol: 'FX:GBPUSD', name: 'GBP/USD OTC', payout: 0.88, basePrice: 1.26540 },
+  { symbol: 'FX:EURUSD', name: 'EUR/USD OTC', payout: 0.92, basePrice: 1.08450 },
+  { symbol: 'FX:USDTRY', name: 'USD/TRY OTC', payout: 0.85, basePrice: 32.1450 },
+  { symbol: 'FX:USDCAD', name: 'USD/CAD OTC', payout: 0.87, basePrice: 1.35820 },
+  { symbol: 'FX:AUDUSD', name: 'AUD/USD OTC', payout: 0.86, basePrice: 0.65410 },
+  { symbol: 'CRYPTO:BTCUSD', name: 'BTC/USDT OTC', payout: 0.90, basePrice: 64250.00 },
+  { symbol: 'CRYPTO:ETHUSD', name: 'ETH/USDT OTC', payout: 0.89, basePrice: 3480.50 },
+  { symbol: 'OANDA:XAUUSD', name: 'GOLD OTC', payout: 0.95, basePrice: 2345.80 },
 ];
 
 export default function TerminalPage() {
@@ -72,7 +74,9 @@ export default function TerminalPage() {
   const [tradeHistory, setTradeHistory] = useState<SettledTrade[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'win' | 'loss' | 'info' } | null>(null);
-  const [currentPrice, setCurrentPrice] = useState(1.33903);
+  
+  const [currentPrice, setCurrentPrice] = useState(selectedAsset.basePrice);
+  const [priceDirection, setPriceDirection] = useState<'up' | 'down' | 'neutral'>('up');
   const [candleSecondsLeft, setCandleSecondsLeft] = useState(60);
 
   const currentPriceRef = useRef(currentPrice);
@@ -80,12 +84,16 @@ export default function TerminalPage() {
     currentPriceRef.current = currentPrice;
   }, [currentPrice]);
 
-  // Candle Countdown Engine (1m Candle Sync)
+  // Reset base price on asset switch
+  useEffect(() => {
+    setCurrentPrice(selectedAsset.basePrice);
+  }, [selectedAsset]);
+
+  // Candle Countdown Engine
   useEffect(() => {
     const updateCandleCountdown = () => {
       const now = Math.floor(Date.now() / 1000);
-      const secondsInCurrentMinute = now % 60;
-      setCandleSecondsLeft(60 - secondsInCurrentMinute);
+      setCandleSecondsLeft(60 - (now % 60));
     };
 
     updateCandleCountdown();
@@ -93,18 +101,26 @@ export default function TerminalPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Live Price Simulation Loop
+  // Precise OTC Price Simulation Engine (Micro-ticks)
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentPrice(prev => {
-        const delta = (Math.random() - 0.495) * 0.00015;
-        return parseFloat((prev + delta).toFixed(5));
+        const isCryptoOrGold = selectedAsset.symbol.includes('CRYPTO') || selectedAsset.symbol.includes('XAU');
+        const scale = isCryptoOrGold ? 0.25 : 0.00008;
+        const change = (Math.random() - 0.495) * scale;
+        const nextPrice = parseFloat((prev + change).toFixed(isCryptoOrGold ? 2 : 5));
+        
+        if (nextPrice > prev) setPriceDirection('up');
+        else if (nextPrice < prev) setPriceDirection('down');
+
+        return nextPrice;
       });
-    }, 800);
+    }, 400);
+
     return () => clearInterval(interval);
   }, [selectedAsset]);
 
-  // Execute Buy / Sell Order
+  // Execute Order
   const handleTrade = (type: 'up' | 'down') => {
     if (investment <= 0 || isNaN(investment)) {
       alert("Please enter a valid investment amount.");
@@ -116,12 +132,6 @@ export default function TerminalPage() {
     }
 
     setBalance(prev => parseFloat((prev - investment).toFixed(2)));
-
-    setNotification({
-      message: `ORDER PLACED: ${type.toUpperCase()} $${investment} on ${selectedAsset.name}`,
-      type: 'info'
-    });
-    setTimeout(() => setNotification(null), 2500);
 
     const now = Date.now();
     const newTrade: ActiveTrade = {
@@ -135,10 +145,16 @@ export default function TerminalPage() {
       payoutRate: selectedAsset.payout,
     };
 
+    setNotification({
+      message: `ORDER PLACED: ${type.toUpperCase()} @ ${newTrade.entryPrice}`,
+      type: 'info'
+    });
+    setTimeout(() => setNotification(null), 2000);
+
     setActiveTrades(prev => [...prev, newTrade]);
   };
 
-  // Timer & Settlement Engine
+  // Accurate Settlement Engine
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now();
@@ -152,21 +168,25 @@ export default function TerminalPage() {
 
           if (secondsLeft <= 0) {
             const exitPrice = latestPrice;
-            const won = trade.type === 'up'
-              ? exitPrice > trade.entryPrice
-              : exitPrice < trade.entryPrice;
-
-            const payout = won ? trade.amount + (trade.amount * trade.payoutRate) : 0;
+            const isTie = exitPrice === trade.entryPrice;
+            const won = !isTie && (trade.type === 'up' ? exitPrice > trade.entryPrice : exitPrice < trade.entryPrice);
+            const payout = won ? trade.amount + (trade.amount * trade.payoutRate) : isTie ? trade.amount : 0;
 
             if (won) {
               setBalance(b => parseFloat((b + payout).toFixed(2)));
               setNotification({
-                message: `WIN! +$${payout.toFixed(2)} on ${trade.asset}`,
+                message: `WIN +$${payout.toFixed(2)} | Entry: ${trade.entryPrice} ? Exit: ${exitPrice}`,
                 type: 'win'
+              });
+            } else if (isTie) {
+              setBalance(b => parseFloat((b + trade.amount).toFixed(2)));
+              setNotification({
+                message: `PUSH (REFUND) $${trade.amount} | Price Unchanged`,
+                type: 'info'
               });
             } else {
               setNotification({
-                message: `LOSS -$${trade.amount.toFixed(2)} on ${trade.asset}`,
+                message: `LOSS -$${trade.amount.toFixed(2)} | Entry: ${trade.entryPrice} ? Exit: ${exitPrice}`,
                 type: 'loss'
               });
             }
@@ -179,11 +199,12 @@ export default function TerminalPage() {
               amount: trade.amount,
               payout,
               won,
+              isTie,
               asset: trade.asset,
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
             }, ...h]);
 
-            setTimeout(() => setNotification(null), 4000);
+            setTimeout(() => setNotification(null), 4500);
           } else {
             remaining.push({ ...trade, timeLeft: secondsLeft });
           }
@@ -191,7 +212,7 @@ export default function TerminalPage() {
 
         return remaining;
       });
-    }, 500);
+    }, 400);
 
     return () => clearInterval(timer);
   }, []);
@@ -207,7 +228,7 @@ export default function TerminalPage() {
 
       {/* WIN/LOSS/INFO TOAST */}
       {notification && (
-        <div className={`fixed top-16 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-2xl flex items-center space-x-3 border text-sm font-bold animate-bounce transition-all ${
+        <div className={`fixed top-16 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-2xl flex items-center space-x-3 border text-xs sm:text-sm font-bold animate-bounce transition-all ${
           notification.type === 'win'
             ? 'bg-[#0b1017] border-[#b6ff3b] text-[#b6ff3b]'
             : notification.type === 'loss'
@@ -379,18 +400,18 @@ export default function TerminalPage() {
                         )}
                         <span className="text-xs font-bold text-white">{t.asset}</span>
                       </div>
-                      <div className="text-[10px] text-gray-500 mt-0.5">
-                        Entry: {t.entryPrice.toFixed(5)} to {t.exitPrice.toFixed(5)}
+                      <div className="text-[10px] text-gray-400 mt-0.5 font-mono">
+                        Entry: {t.entryPrice} ? Exit: {t.exitPrice}
                       </div>
                       <div className="text-[9px] text-gray-600">{t.timestamp}</div>
                     </div>
 
                     <div className="text-right">
-                      <div className={`text-xs font-black ${t.won ? 'text-[#b6ff3b]' : 'text-red-400'}`}>
-                        {t.won ? `+$${t.payout.toFixed(2)}` : `-$${t.amount.toFixed(2)}`}
+                      <div className={`text-xs font-black ${t.won ? 'text-[#b6ff3b]' : t.isTie ? 'text-gray-300' : 'text-red-400'}`}>
+                        {t.won ? `+$${t.payout.toFixed(2)}` : t.isTie ? `$${t.amount}` : `-$${t.amount.toFixed(2)}`}
                       </div>
                       <div className="text-[9px] font-bold uppercase text-gray-500">
-                        {t.won ? 'WIN' : 'LOSS'}
+                        {t.won ? 'WIN' : t.isTie ? 'PUSH' : 'LOSS'}
                       </div>
                     </div>
                   </div>
@@ -416,17 +437,22 @@ export default function TerminalPage() {
             </div>
           </div>
 
+          {/* LIVE ACTIVE TRADE BADGES OVERLAY */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
             {activeTrades.map((trade, idx) => {
-              const topOffset = 25 + (idx * 65);
+              const topOffset = 25 + (idx * 75);
+              const isWinningCurrently = trade.type === 'up' 
+                ? currentPrice > trade.entryPrice 
+                : currentPrice < trade.entryPrice;
+
               return (
                 <div
                   key={trade.id}
-                  className="absolute right-6 px-4 py-2.5 rounded-xl border shadow-2xl flex items-center space-x-4 pointer-events-auto backdrop-blur-md transition-all duration-300"
+                  className="absolute right-6 px-4 py-2.5 rounded-xl border shadow-2xl flex items-center space-x-4 pointer-events-auto backdrop-blur-md transition-all duration-300 animate-in fade-in"
                   style={{
                     top: `${topOffset}px`,
-                    backgroundColor: trade.type === 'up' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                    borderColor: trade.type === 'up' ? '#10b981' : '#ef4444',
+                    backgroundColor: isWinningCurrently ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                    borderColor: isWinningCurrently ? '#10b981' : '#ef4444',
                   }}
                 >
                   <div className="flex items-center space-x-2">
@@ -436,8 +462,8 @@ export default function TerminalPage() {
                       {trade.type === 'up' ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                     </div>
                     <div>
-                      <div className="text-[10px] font-extrabold uppercase text-gray-400">{trade.asset}</div>
-                      <div className="text-xs font-mono font-bold text-white">${trade.amount}</div>
+                      <div className="text-[10px] font-extrabold uppercase text-gray-300">{trade.asset}</div>
+                      <div className="text-xs font-mono font-bold text-white">Entry: {trade.entryPrice}</div>
                     </div>
                   </div>
 
@@ -455,7 +481,20 @@ export default function TerminalPage() {
 
         {/* RIGHT CONTROL PANEL */}
         <div className="relative z-30 w-[300px] border-l border-gray-800 bg-[#0b1017] flex flex-col p-4 shrink-0">
-          <div className="space-y-5">
+          <div className="space-y-4">
+
+            {/* LIVE ENGINE PRICE TICKER DISPLAY */}
+            <div className="bg-[#161c24] border border-gray-800 rounded-xl p-3 flex items-center justify-between shadow-inner">
+              <div className="flex items-center space-x-2 text-xs font-bold text-gray-400 uppercase">
+                <Activity size={14} className="text-[#b6ff3b] animate-pulse" />
+                <span>Live Price</span>
+              </div>
+              <div className={`text-xl font-mono font-black transition-colors ${
+                priceDirection === 'up' ? 'text-[#10b981]' : 'text-[#ef4444]'
+              }`}>
+                {currentPrice}
+              </div>
+            </div>
 
             {/* EXPIRATION TIME */}
             <div>
@@ -522,24 +561,24 @@ export default function TerminalPage() {
             </div>
 
             {/* PAYOUT CARD */}
-            <div className="bg-[#161c24]/80 rounded-xl p-4 border border-[#b6ff3b]/20 text-center">
+            <div className="bg-[#161c24]/80 rounded-xl p-3 border border-[#b6ff3b]/20 text-center">
               <div className="text-[10px] font-extrabold text-[#b6ff3b] uppercase tracking-widest mb-0.5">
                 Profit +{(selectedAsset.payout * 100).toFixed(0)}%
               </div>
-              <div className="text-3xl font-black text-[#b6ff3b] tracking-tight">
+              <div className="text-2xl font-black text-[#b6ff3b] tracking-tight">
                 +${(investment * selectedAsset.payout).toFixed(2)}
               </div>
-              <div className="text-[10px] text-gray-400 mt-1 uppercase font-bold">
+              <div className="text-[10px] text-gray-400 mt-0.5 uppercase font-bold">
                 Total Return: ${(investment * (1 + selectedAsset.payout)).toFixed(2)}
               </div>
             </div>
 
             {/* TRADE BUTTONS */}
-            <div className="space-y-3 pt-1">
+            <div className="space-y-2.5 pt-1">
               <button
                 type="button"
                 onClick={() => handleTrade('up')}
-                className="w-full bg-[#10b981] hover:bg-[#059669] active:scale-[0.95] text-white py-4 rounded-xl font-black text-base flex items-center justify-center space-x-2 transition-all shadow-lg shadow-emerald-950/40 cursor-pointer border border-emerald-400/20"
+                className="w-full bg-[#10b981] hover:bg-[#059669] active:scale-[0.95] text-white py-3.5 rounded-xl font-black text-base flex items-center justify-center space-x-2 transition-all shadow-lg shadow-emerald-950/40 cursor-pointer border border-emerald-400/20"
               >
                 <TrendingUp size={22} />
                 <span>BUY / HIGHER</span>
@@ -548,7 +587,7 @@ export default function TerminalPage() {
               <button
                 type="button"
                 onClick={() => handleTrade('down')}
-                className="w-full bg-[#ef4444] hover:bg-[#dc2626] active:scale-[0.95] text-white py-4 rounded-xl font-black text-base flex items-center justify-center space-x-2 transition-all shadow-lg shadow-red-950/40 cursor-pointer border border-red-400/20"
+                className="w-full bg-[#ef4444] hover:bg-[#dc2626] active:scale-[0.95] text-white py-3.5 rounded-xl font-black text-base flex items-center justify-center space-x-2 transition-all shadow-lg shadow-red-950/40 cursor-pointer border border-red-400/20"
               >
                 <TrendingDown size={22} />
                 <span>SELL / LOWER</span>
@@ -556,7 +595,7 @@ export default function TerminalPage() {
             </div>
           </div>
 
-          <div className="mt-auto pt-4 border-t border-gray-800 flex items-center justify-center space-x-2 text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+          <div className="mt-auto pt-3 border-t border-gray-800 flex items-center justify-center space-x-2 text-[10px] text-gray-500 font-bold uppercase tracking-widest">
             <span className="w-2 h-2 bg-[#b6ff3b] rounded-full animate-ping"></span>
             <span>ExpiryCapital Engine Connected</span>
           </div>
