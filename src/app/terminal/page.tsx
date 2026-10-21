@@ -195,7 +195,7 @@ export default function TerminalPage() {
       <header className="h-14 border-b border-gray-800 flex items-center justify-between px-4 shrink-0 bg-[#0b1017] z-20">
         <div className="flex items-center space-x-4">
           <div className="bg-[#b6ff3b] text-black w-8 h-8 rounded flex items-center justify-center font-black text-xl shadow-lg shadow-[#b6ff3b]/20">
-            ×
+            x
           </div>
           <span className="font-extrabold tracking-wider text-white text-sm hidden sm:inline">EXPIRYCAPITAL</span>
 
@@ -344,7 +344,7 @@ export default function TerminalPage() {
                         <span className="text-xs font-bold text-white">{t.asset}</span>
                       </div>
                       <div className="text-[10px] text-gray-500 mt-0.5">
-                        Entry: {t.entryPrice.toFixed(5)} ? Exit: {t.exitPrice.toFixed(5)}
+                        Entry: {t.entryPrice.toFixed(5)} to {t.exitPrice.toFixed(5)}
                       </div>
                       <div className="text-[9px] text-gray-600">{t.timestamp}</div>
                     </div>
