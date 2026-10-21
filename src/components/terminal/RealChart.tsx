@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useEffect, useRef } from 'react';
-import { createChart, ColorType, LineStyle, IPriceLine, ISeriesApi } from 'lightweight-charts';
+import { createChart, ColorType, LineStyle, IPriceLine, ISeriesApi, AreaSeries } from 'lightweight-charts';
 
 interface Trade {
   id: string;
@@ -18,7 +18,7 @@ interface RealChartProps {
 
 export default function RealChart({ symbol, trades, onPriceTick }: RealChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const seriesRef = useRef<ISeriesApi<any> | null>(null);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
   const currentPriceRef = useRef<number>(1.08500);
 
@@ -59,7 +59,7 @@ export default function RealChart({ symbol, trades, onPriceTick }: RealChartProp
       autoSize: true,
     });
 
-    const series = chart.addAreaSeries({
+    const series = chart.addSeries(AreaSeries, {
       topColor: 'rgba(182, 255, 59, 0.25)',
       bottomColor: 'rgba(182, 255, 59, 0.00)',
       lineColor: '#b6ff3b',
