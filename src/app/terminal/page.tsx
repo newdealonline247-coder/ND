@@ -84,7 +84,6 @@ export default function TerminalPage() {
     currentPriceRef.current = currentPrice;
   }, [currentPrice]);
 
-  // Reset base price on asset switch
   useEffect(() => {
     setCurrentPrice(selectedAsset.basePrice);
   }, [selectedAsset]);
@@ -101,7 +100,7 @@ export default function TerminalPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Precise OTC Price Simulation Engine (Micro-ticks)
+  // Micro-tick Price Engine
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentPrice(prev => {
@@ -437,38 +436,53 @@ export default function TerminalPage() {
             </div>
           </div>
 
-          {/* LIVE ACTIVE TRADE BADGES OVERLAY */}
+          {/* DYNAMIC LIVE COLOR-CHANGING TRADE BADGES OVERLAY */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
             {activeTrades.map((trade, idx) => {
               const topOffset = 25 + (idx * 75);
-              const isWinningCurrently = trade.type === 'up' 
-                ? currentPrice > trade.entryPrice 
-                : currentPrice < trade.entryPrice;
+              const isTie = currentPrice === trade.entryPrice;
+              const isWinningCurrently = !isTie && (
+                trade.type === 'up' 
+                  ? currentPrice > trade.entryPrice 
+                  : currentPrice < trade.entryPrice
+              );
 
               return (
                 <div
                   key={trade.id}
-                  className="absolute right-6 px-4 py-2.5 rounded-xl border shadow-2xl flex items-center space-x-4 pointer-events-auto backdrop-blur-md transition-all duration-300 animate-in fade-in"
-                  style={{
-                    top: `${topOffset}px`,
-                    backgroundColor: isWinningCurrently ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                    borderColor: isWinningCurrently ? '#10b981' : '#ef4444',
-                  }}
+                  className={`absolute right-6 px-4 py-2.5 rounded-2xl border shadow-2xl flex items-center space-x-4 pointer-events-auto backdrop-blur-md transition-all duration-300 ${
+                    isTie
+                      ? 'bg-gray-900/80 border-gray-500 shadow-gray-950/50'
+                      : isWinningCurrently
+                      ? 'bg-[#042f22]/90 border-[#10b981] shadow-[0_0_20px_rgba(16,185,129,0.35)]'
+                      : 'bg-[#450a0a]/90 border-[#ef4444] shadow-[0_0_20px_rgba(239,68,68,0.35)]'
+                  }`}
+                  style={{ top: `${topOffset}px` }}
                 >
-                  <div className="flex items-center space-x-2">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-white ${
-                      trade.type === 'up' ? 'bg-[#10b981]' : 'bg-[#ef4444]'
+                  <div className="flex items-center space-x-2.5">
+                    {/* DYNAMIC ICON BOX */}
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-extrabold text-white transition-colors duration-300 ${
+                      isTie
+                        ? 'bg-gray-600'
+                        : isWinningCurrently
+                        ? 'bg-[#10b981]'
+                        : 'bg-[#ef4444]'
                     }`}>
-                      {trade.type === 'up' ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                      {trade.type === 'up' ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
                     </div>
+
                     <div>
-                      <div className="text-[10px] font-extrabold uppercase text-gray-300">{trade.asset}</div>
-                      <div className="text-xs font-mono font-bold text-white">Entry: {trade.entryPrice}</div>
+                      <div className="text-[10px] font-extrabold uppercase tracking-wider text-gray-300">{trade.asset}</div>
+                      <div className="text-xs font-mono font-bold text-white flex items-center space-x-1">
+                        <span>Entry:</span>
+                        <span className={isWinningCurrently ? 'text-[#b6ff3b]' : 'text-red-300'}>{trade.entryPrice}</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="text-right border-l border-white/10 pl-4">
-                    <div className="text-[10px] font-bold text-gray-400 uppercase">Expiry</div>
+                  {/* RIGHT COUNTDOWN DIVIDER */}
+                  <div className="text-right border-l border-white/20 pl-4">
+                    <div className="text-[9px] font-extrabold text-gray-400 uppercase tracking-widest">EXPIRY</div>
                     <div className="text-base font-mono font-black text-white">
                       00:{trade.timeLeft.toString().padStart(2, '0')}
                     </div>
