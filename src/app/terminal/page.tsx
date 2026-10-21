@@ -1,114 +1,322 @@
 ﻿'use client';
 
-import { useState } from 'react';
-import { 
-  TrendingUp, TrendingDown, Clock, Wallet, User, 
-  History, ChevronDown, Plus 
+import { useState, useEffect } from 'react';
+import {
+  TrendingUp, TrendingDown, Clock, Wallet, User,
+  History, ChevronDown, Plus, Settings, BarChart2,
+  MessageCircle, HelpCircle, Volume2, Maximize2
 } from 'lucide-react';
 
 export default function TerminalPage() {
-  const [balanceType] = useState<'DEMO' | 'REAL'>('DEMO');
-  const [balance] = useState(10000);
-  const [amount, setAmount] = useState(10);
-  const [time] = useState('00:01:00');
-  const [symbol] = useState('EUR/USD OTC');
+  const [balanceType, setBalanceType] = useState<'DEMO' | 'REAL'>('DEMO');
+  const [balance, setBalance] = useState(10000.00);
+  const [amount, setAmount] = useState(6);
+  const [seconds, setSeconds] = useState(120);
+  const [symbol, setSymbol] = useState('EUR/USD OTC');
   const [payoutRate] = useState(92);
+  const [price, setPrice] = useState(1.13662);
+  const [activeTab, setActiveTab] = useState('trade');
+
+  // Fake live price tick
+  useEffect(() => {
+    const t = setInterval(() => {
+      setPrice(p => +(p + (Math.random() - 0.5) * 0.00015).toFixed(5));
+    }, 800);
+    return () => clearInterval(t);
+  }, []);
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60).toString().padStart(2, '0');
+    const sec = (s % 60).toString().padStart(2, '0');
+    return `00:${m}:${sec}`;
+  };
 
   const estimatedPayout = (amount * (1 + payoutRate / 100)).toFixed(2);
+  const profit = (amount * payoutRate / 100).toFixed(2);
 
   return (
-    <div className="flex h-screen w-screen bg-[#0e131b] text-white font-sans overflow-hidden select-none">
-      <aside className="w-16 border-r border-[#1e2532] bg-[#121824] flex flex-col items-center py-4 space-y-6 z-20">
-        <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center font-bold justify-center text-xl text-white">
-          PO
-        </div>
-        <nav className="flex flex-col space-y-4 pt-4 text-gray-400">
-          <button className="p-3 hover:bg-[#1a2232] rounded-xl hover:text-white transition">
-            <TrendingUp size={20} />
-          </button>
-          <button className="p-3 hover:bg-[#1a2232] rounded-xl hover:text-white transition">
-            <History size={20} />
-          </button>
-          <button className="p-3 hover:bg-[#1a2232] rounded-xl hover:text-white transition">
-            <Wallet size={20} />
-          </button>
-          <button className="p-3 hover:bg-[#1a2232] rounded-xl hover:text-white transition">
-            <User size={20} />
-          </button>
+    <div className="flex h-screen w-screen bg-[#0b0f14] text-white font-sans overflow-hidden select-none text-[13px]">
+
+      {/* ══════ LEFT SIDEBAR ══════ */}
+      <aside className="w-[56px] bg-[#0f141b] border-r border-[#1a2030] flex flex-col items-center py-3 z-30">
+        {/* Logo */}
+        <a href="/" className="w-9 h-9 rounded-lg bg-[#b6ff3b] flex items-center justify-center mb-6 hover:scale-105 transition">
+          <span className="text-black font-black text-lg leading-none">×</span>
+        </a>
+
+        <nav className="flex flex-col gap-1 flex-1">
+          {[
+            { icon: BarChart2, id: 'trade', tip: 'Trade' },
+            { icon: History, id: 'history', tip: 'History' },
+            { icon: Wallet, id: 'wallet', tip: 'Wallet' },
+            { icon: User, id: 'profile', tip: 'Profile' },
+            { icon: MessageCircle, id: 'chat', tip: 'Support' },
+            { icon: HelpCircle, id: 'help', tip: 'Help' },
+          ].map(({ icon: Icon, id }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition ${
+                activeTab === id
+                  ? 'bg-[#1a2332] text-[#b6ff3b]'
+                  : 'text-[#6b7280] hover:text-white hover:bg-[#151b26]'
+              }`}
+            >
+              <Icon size={18} strokeWidth={1.75} />
+            </button>
+          ))}
         </nav>
+
+        <button className="w-10 h-10 rounded-xl flex items-center justify-center text-[#6b7280] hover:text-white hover:bg-[#151b26] transition mb-1">
+          <Settings size={18} strokeWidth={1.75} />
+        </button>
       </aside>
 
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        <header className="h-16 border-b border-[#1e2532] bg-[#121824] px-6 flex items-center justify-between z-10">
-          <div className="flex items-center space-x-3 bg-[#1a2232] px-4 py-2 rounded-xl cursor-pointer border border-[#263147] hover:border-blue-500 transition">
-            <span className="w-6 h-4 bg-blue-500 rounded-sm text-[10px] font-bold flex items-center justify-center">🇪🇺🇺🇸</span>
-            <span className="font-semibold text-sm">{symbol}</span>
-            <ChevronDown size={16} className="text-gray-400" />
+      {/* ══════ MAIN ══════ */}
+      <div className="flex-1 flex flex-col min-w-0">
+
+        {/* ── TOP BAR ── */}
+        <header className="h-12 bg-[#0f141b] border-b border-[#1a2030] px-3 flex items-center justify-between shrink-0">
+          {/* Pair selector */}
+          <button className="flex items-center gap-2.5 bg-[#151b26] hover:bg-[#1a2332] border border-[#1e2636] rounded-lg px-3 h-8 transition group">
+            <div className="flex -space-x-1">
+              <span className="w-4 h-4 rounded-full bg-[#3b82f6] border border-[#0f141b] text-[8px] flex items-center justify-center">€</span>
+              <span className="w-4 h-4 rounded-full bg-[#22c55e] border border-[#0f141b] text-[8px] flex items-center justify-center">$</span>
+            </div>
+            <span className="font-semibold text-[13px] tracking-wide">{symbol}</span>
+            <ChevronDown size={14} className="text-[#6b7280] group-hover:text-white" />
+          </button>
+
+          {/* Center brand (subtle) */}
+          <div className="hidden md:flex items-center gap-1.5 opacity-40">
+            <div className="w-5 h-5 rounded bg-[#b6ff3b] flex items-center justify-center">
+              <span className="text-black font-black text-xs">×</span>
+            </div>
+            <span className="text-[11px] font-bold tracking-[0.15em] text-[#b6ff3b]">EXPIRY<span className="text-white">CAPITAL</span></span>
           </div>
 
-          <div className="flex items-center space-x-4">
-            <div className="bg-[#1a2232] px-4 py-1.5 rounded-xl border border-[#263147] flex items-center space-x-3">
-              <span className="text-xs text-gray-400">{balanceType}</span>
-              <span className="font-bold text-green-400 text-lg">${balance.toLocaleString()}</span>
+          {/* Right controls */}
+          <div className="flex items-center gap-2">
+            {/* Account type toggle */}
+            <div className="flex bg-[#151b26] border border-[#1e2636] rounded-lg p-0.5 h-8">
+              <button
+                onClick={() => setBalanceType('DEMO')}
+                className={`px-2.5 rounded-md text-[11px] font-bold transition ${
+                  balanceType === 'DEMO' ? 'bg-[#1e2a3a] text-[#b6ff3b]' : 'text-[#6b7280] hover:text-white'
+                }`}
+              >
+                DEMO
+              </button>
+              <button
+                onClick={() => setBalanceType('REAL')}
+                className={`px-2.5 rounded-md text-[11px] font-bold transition ${
+                  balanceType === 'REAL' ? 'bg-[#1e2a3a] text-[#b6ff3b]' : 'text-[#6b7280] hover:text-white'
+                }`}
+              >
+                REAL
+              </button>
             </div>
-            <button className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2 rounded-xl font-bold flex items-center space-x-2 transition shadow-lg shadow-emerald-900/40">
-              <Plus size={18} />
-              <span>TOP UP</span>
+
+            {/* Balance */}
+            <div className="flex items-center gap-2 bg-[#151b26] border border-[#1e2636] rounded-lg px-3 h-8">
+              <span className="text-[11px] text-[#6b7280] uppercase tracking-wider">{balanceType}</span>
+              <span className="font-bold text-[#b6ff3b] tabular-nums">
+                ${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {/* Top Up */}
+            <button className="h-8 px-3.5 rounded-lg bg-[#b6ff3b] hover:bg-[#c8ff5e] text-black font-bold text-[12px] flex items-center gap-1.5 transition shadow-[0_0_20px_-4px_rgba(182,255,59,0.5)]">
+              <Plus size={14} strokeWidth={2.5} />
+              TOP UP
             </button>
           </div>
         </header>
 
-        <div className="flex-1 flex relative">
-          <div className="flex-1 bg-[#090d14] relative p-4 flex flex-col justify-center items-center">
-            <div className="absolute top-6 left-6 z-10 bg-[#121824]/80 backdrop-blur border border-[#1e2532] px-4 py-2 rounded-xl">
-              <span className="text-xs text-gray-400 block">Current Price</span>
-              <span className="text-2xl font-mono font-bold text-green-400">1.13662</span>
+        {/* ── BODY ── */}
+        <div className="flex-1 flex min-h-0">
+
+          {/* CHART AREA */}
+          <div className="flex-1 relative bg-[#080c11] flex flex-col">
+            {/* Chart toolbar */}
+            <div className="h-9 border-b border-[#141a24] px-3 flex items-center gap-1 bg-[#0b0f14]/80">
+              {['1m', '2m', '5m', '15m', '30m', '1h'].map((tf, i) => (
+                <button
+                  key={tf}
+                  className={`h-6 px-2 rounded text-[11px] font-medium transition ${
+                    i === 1 ? 'bg-[#1a2332] text-[#b6ff3b]' : 'text-[#6b7280] hover:text-white'
+                  }`}
+                >
+                  {tf}
+                </button>
+              ))}
+              <div className="flex-1" />
+              <button className="w-7 h-7 rounded flex items-center justify-center text-[#6b7280] hover:text-white hover:bg-[#151b26]">
+                <Volume2 size={14} />
+              </button>
+              <button className="w-7 h-7 rounded flex items-center justify-center text-[#6b7280] hover:text-white hover:bg-[#151b26]">
+                <Maximize2 size={14} />
+              </button>
             </div>
 
-            <div className="text-gray-600 text-center">
-              <div className="animate-pulse text-lg font-mono">Chart Canvas (Connecting TradingView Engine...)</div>
+            {/* Chart canvas placeholder */}
+            <div className="flex-1 relative overflow-hidden">
+              {/* Grid background */}
+              <div
+                className="absolute inset-0 opacity-[0.07]"
+                style={{
+                  backgroundImage: `
+                    linear-gradient(to right, #ffffff 1px, transparent 1px),
+                    linear-gradient(to bottom, #ffffff 1px, transparent 1px)
+                  `,
+                  backgroundSize: '48px 48px',
+                }}
+              />
+
+              {/* Price badge */}
+              <div className="absolute top-4 left-4 z-10 flex flex-col gap-1">
+                <div className="bg-[#0f141b]/90 backdrop-blur border border-[#1e2636] rounded-lg px-3 py-1.5">
+                  <div className="text-[10px] text-[#6b7280] uppercase tracking-wider">Live Price</div>
+                  <div className="font-mono text-xl font-bold text-[#b6ff3b] tabular-nums tracking-tight">
+                    {price.toFixed(5)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Fake candlestick visual */}
+              <div className="absolute inset-0 flex items-end justify-center gap-[3px] px-16 pb-16 pt-20">
+                {Array.from({ length: 48 }).map((_, i) => {
+                  const h = 20 + Math.sin(i * 0.4) * 30 + Math.random() * 40;
+                  const up = Math.random() > 0.45;
+                  return (
+                    <div key={i} className="flex flex-col items-center justify-end" style={{ height: '100%' }}>
+                      <div
+                        className={`w-[3px] rounded-sm ${up ? 'bg-[#22c55e]' : 'bg-[#ef4444]'}`}
+                        style={{ height: `${h}%`, opacity: 0.35 + (i / 48) * 0.5 }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Current price line */}
+              <div className="absolute left-0 right-0 top-1/2 border-t border-dashed border-[#b6ff3b]/40 flex items-center">
+                <div className="ml-auto mr-4 -mt-3 bg-[#b6ff3b] text-black text-[11px] font-bold px-2 py-0.5 rounded">
+                  {price.toFixed(5)}
+                </div>
+              </div>
+
+              {/* Brand watermark */}
+              <div className="absolute bottom-4 left-4 flex items-center gap-1.5 opacity-20">
+                <div className="w-4 h-4 rounded bg-[#b6ff3b] flex items-center justify-center">
+                  <span className="text-black font-black text-[10px]">×</span>
+                </div>
+                <span className="text-[10px] font-bold tracking-widest">EXPIRYCAPITAL</span>
+              </div>
             </div>
           </div>
 
-          <aside className="w-80 border-l border-[#1e2532] bg-[#121824] p-6 flex flex-col justify-between">
-            <div className="space-y-6">
+          {/* ══════ RIGHT TRADE PANEL ══════ */}
+          <aside className="w-[280px] bg-[#0f141b] border-l border-[#1a2030] flex flex-col shrink-0">
+            <div className="p-4 flex-1 flex flex-col gap-4">
+
+              {/* Expiration */}
               <div>
-                <label className="text-xs text-gray-400 block mb-2 font-medium">Expiration Time</label>
-                <div className="bg-[#1a2232] border border-[#263147] rounded-xl p-3 flex items-center justify-between">
-                  <span className="font-mono text-xl font-bold">{time}</span>
-                  <Clock size={18} className="text-gray-400" />
+                <div className="text-[10px] uppercase tracking-wider text-[#6b7280] mb-1.5 font-medium">
+                  Expiration time
+                </div>
+                <div className="bg-[#151b26] border border-[#1e2636] rounded-xl h-11 px-3 flex items-center justify-between">
+                  <span className="font-mono text-lg font-semibold tabular-nums">{formatTime(seconds)}</span>
+                  <Clock size={16} className="text-[#6b7280]" />
+                </div>
+                {/* quick time chips */}
+                <div className="flex gap-1 mt-2">
+                  {[60, 120, 300, 900].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setSeconds(s)}
+                      className={`flex-1 h-7 rounded-lg text-[11px] font-medium transition ${
+                        seconds === s
+                          ? 'bg-[#1a2332] text-[#b6ff3b] border border-[#b6ff3b]/30'
+                          : 'bg-[#151b26] text-[#6b7280] border border-transparent hover:text-white'
+                      }`}
+                    >
+                      {s < 60 ? `${s}s` : `${s / 60}m`}
+                    </button>
+                  ))}
                 </div>
               </div>
 
+              {/* Amount */}
               <div>
-                <label className="text-xs text-gray-400 block mb-2 font-medium">Investment Amount ($)</label>
-                <div className="bg-[#1a2232] border border-[#263147] rounded-xl p-3 flex items-center justify-between">
+                <div className="text-[10px] uppercase tracking-wider text-[#6b7280] mb-1.5 font-medium">
+                  Amount
+                </div>
+                <div className="bg-[#151b26] border border-[#1e2636] rounded-xl h-11 px-3 flex items-center gap-2">
                   <input
                     type="number"
+                    min={1}
                     value={amount}
-                    onChange={(e) => setAmount(Number(e.target.value))}
-                    className="bg-transparent font-mono text-xl font-bold w-full outline-none text-white"
+                    onChange={(e) => setAmount(Math.max(1, Number(e.target.value) || 1))}
+                    className="bg-transparent font-mono text-lg font-semibold w-full outline-none tabular-nums"
                   />
-                  <span className="text-gray-400 font-bold">$</span>
+                  <span className="text-[#6b7280] font-medium">$</span>
+                </div>
+                <div className="flex gap-1 mt-2">
+                  {[1, 5, 10, 25, 50, 100].map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setAmount(v)}
+                      className={`flex-1 h-7 rounded-lg text-[11px] font-medium transition ${
+                        amount === v
+                          ? 'bg-[#1a2332] text-[#b6ff3b] border border-[#b6ff3b]/30'
+                          : 'bg-[#151b26] text-[#6b7280] border border-transparent hover:text-white'
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="bg-[#17221e] border border-emerald-900/50 rounded-xl p-4 text-center">
-                <span className="text-xs text-emerald-400 block font-semibold">Payout (+{payoutRate}%)</span>
-                <span className="text-2xl font-bold text-emerald-400">${estimatedPayout}</span>
+              {/* Payout card */}
+              <div className="bg-gradient-to-b from-[#14201a] to-[#0f1814] border border-[#1e3a2f] rounded-xl p-3.5 text-center">
+                <div className="text-[10px] uppercase tracking-wider text-[#4ade80] mb-0.5 font-medium">
+                  Payout +{payoutRate}%
+                </div>
+                <div className="text-2xl font-bold text-[#4ade80] tabular-nums tracking-tight">
+                  +${profit}
+                </div>
+                <div className="text-[11px] text-[#6b7280] mt-0.5">
+                  Total return <span className="text-white font-medium">${estimatedPayout}</span>
+                </div>
+              </div>
+
+              <div className="flex-1" />
+
+              {/* BUY / SELL */}
+              <div className="space-y-2.5 pb-1">
+                <button
+                  className="w-full h-12 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] active:scale-[0.98] text-white font-bold text-[15px] flex items-center justify-center gap-2 transition shadow-[0_8px_24px_-6px_rgba(34,197,94,0.45)]"
+                >
+                  <TrendingUp size={20} strokeWidth={2.5} />
+                  BUY
+                </button>
+                <button
+                  className="w-full h-12 rounded-xl bg-[#ef4444] hover:bg-[#dc2626] active:scale-[0.98] text-white font-bold text-[15px] flex items-center justify-center gap-2 transition shadow-[0_8px_24px_-6px_rgba(239,68,68,0.45)]"
+                >
+                  <TrendingDown size={20} strokeWidth={2.5} />
+                  SELL
+                </button>
               </div>
             </div>
 
-            <div className="space-y-4 pt-6">
-              <button className="w-full bg-emerald-500 hover:bg-emerald-400 active:scale-[0.98] text-white font-extrabold text-xl py-4 rounded-2xl flex items-center justify-center space-x-2 transition shadow-lg shadow-emerald-950/50">
-                <TrendingUp size={24} />
-                <span>HIGHER / BUY</span>
-              </button>
-
-              <button className="w-full bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white font-extrabold text-xl py-4 rounded-2xl flex items-center justify-center space-x-2 transition shadow-lg shadow-rose-950/50">
-                <TrendingDown size={24} />
-                <span>LOWER / SELL</span>
-              </button>
+            {/* Footer micro brand */}
+            <div className="h-8 border-t border-[#1a2030] flex items-center justify-center gap-1.5 opacity-30">
+              <div className="w-3 h-3 rounded-sm bg-[#b6ff3b] flex items-center justify-center">
+                <span className="text-black font-black text-[8px]">×</span>
+              </div>
+              <span className="text-[9px] font-bold tracking-[0.2em]">EXPIRYCAPITAL</span>
             </div>
           </aside>
         </div>
