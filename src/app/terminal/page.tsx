@@ -5,14 +5,15 @@ import dynamic from 'next/dynamic';
 import {
   TrendingUp, TrendingDown, Clock, Wallet, User,
   History, ChevronDown, Plus, Settings, BarChart2,
-  MessageCircle, HelpCircle, CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight, Layers
+  MessageCircle, HelpCircle, CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight, Layers,
+  Activity, Sliders
 } from 'lucide-react';
 
 const RealChart = dynamic(() => import('@/components/terminal/RealChart'), {
   ssr: false,
   loading: () => (
     <div className="w-full h-full flex items-center justify-center text-[#b6ff3b] font-mono text-sm animate-pulse bg-[#080c11]">
-      Loading High-Precision Price Chart Engine...
+      Loading Candlestick Chart Engine...
     </div>
   ),
 });
@@ -58,6 +59,8 @@ export default function TerminalPage() {
   const [balance, setBalance] = useState(10000.00);
   const [amount, setAmount] = useState(10);
   const [seconds, setSeconds] = useState(60);
+  const [chartType, setChartType] = useState<'candlestick' | 'area'>('candlestick');
+  const [showSMA, setShowSMA] = useState(true);
   const [activeTab, setActiveTab] = useState<'trade' | 'history'>('trade');
   const [activeTrades, setActiveTrades] = useState<Trade[]>([]);
   const [closedTrades, setClosedTrades] = useState<Trade[]>([]);
@@ -76,7 +79,6 @@ export default function TerminalPage() {
 
         prevTrades.forEach((trade) => {
           if (trade.remainingSeconds <= 1) {
-            // Check win condition against live market price
             const isWin = trade.direction === 'BUY' 
               ? livePrice >= trade.strikePrice 
               : livePrice <= trade.strikePrice;
@@ -127,7 +129,7 @@ export default function TerminalPage() {
       assetName: selectedAsset.name,
       direction,
       amount,
-      strikePrice: livePrice, // Exact entry price
+      strikePrice: livePrice,
       payoutRate: selectedAsset.payout,
       payoutAmount,
       remainingSeconds: seconds,
@@ -163,7 +165,7 @@ export default function TerminalPage() {
         </div>
       )}
 
-      {/* ══════ LEFT SIDEBAR ══════ */}
+      {/* LEFT SIDEBAR */}
       <aside className="w-[56px] bg-[#0f141b] border-r border-[#1a2030] flex flex-col items-center py-3 z-30 shrink-0">
         <a href="/" className="w-9 h-9 rounded-lg bg-[#b6ff3b] flex items-center justify-center mb-6 hover:scale-105 transition shadow-[0_0_15px_rgba(182,255,59,0.4)]">
           <span className="text-black font-black text-lg leading-none">×</span>
@@ -210,7 +212,7 @@ export default function TerminalPage() {
         </button>
       </aside>
 
-      {/* ══════ MAIN CONTENT ══════ */}
+      {/* MAIN CONTENT */}
       <div className="flex-1 flex flex-col min-w-0">
 
         {/* TOP HEADER */}
@@ -366,14 +368,56 @@ export default function TerminalPage() {
             </div>
           )}
 
-          {/* REAL CHART CANVAS */}
-          <div className="flex-1 relative bg-[#080c11]">
-            <RealChart symbol={selectedAsset.symbol} trades={activeTrades} onPriceTick={handlePriceTick} />
+          {/* REAL CHART CANVAS & TOOLBAR */}
+          <div className="flex-1 relative bg-[#080c11] flex flex-col">
+            
+            {/* Chart Toolbar (Candlestick / Area + SMA Indicator) */}
+            <div className="h-9 border-b border-[#1a2030] px-3 flex items-center gap-2 bg-[#0f141b]/90 z-20">
+              <div className="flex bg-[#151b26] border border-[#1e2636] rounded-md p-0.5">
+                <button
+                  onClick={() => setChartType('candlestick')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition flex items-center gap-1 ${
+                    chartType === 'candlestick' ? 'bg-[#1a2332] text-[#b6ff3b]' : 'text-[#6b7280] hover:text-white'
+                  }`}
+                >
+                  <Activity size={12} />
+                  Candles 🕯️
+                </button>
+                <button
+                  onClick={() => setChartType('area')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition flex items-center gap-1 ${
+                    chartType === 'area' ? 'bg-[#1a2332] text-[#b6ff3b]' : 'text-[#6b7280] hover:text-white'
+                  }`}
+                >
+                  Area 📈
+                </button>
+              </div>
 
-            {/* Price Badge */}
-            <div className="absolute top-4 left-4 pointer-events-none z-10 bg-[#0f141b]/90 border border-[#1e2636] rounded-xl px-3.5 py-2 shadow-2xl backdrop-blur">
-              <span className="text-[10px] text-[#6b7280] uppercase font-bold tracking-wider block">Live Price</span>
-              <span className="font-mono text-xl font-bold text-[#b6ff3b] tabular-nums">{livePrice}</span>
+              <button
+                onClick={() => setShowSMA(!showSMA)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition flex items-center gap-1.5 ${
+                  showSMA ? 'bg-[#3b82f6]/10 border-[#3b82f6] text-[#3b82f6]' : 'bg-[#151b26] border-[#1e2636] text-[#6b7280] hover:text-white'
+                }`}
+              >
+                <Sliders size={12} />
+                SMA 20 Indicator
+              </button>
+            </div>
+
+            <div className="flex-1 relative">
+              <RealChart 
+                symbol={selectedAsset.symbol} 
+                trades={activeTrades} 
+                chartType={chartType} 
+                showSMA={showSMA} 
+                onPriceTick={handlePriceTick} 
+              />
+
+              {/* Price Badge */}
+              <div className="absolute top-4 left-4 pointer-events-none z-10 bg-[#0f141b]/90 border border-[#1e2636] rounded-xl px-3.5 py-2 shadow-2xl backdrop-blur">
+                <span className="text-[10px] text-[#6b7280] uppercase font-bold tracking-wider block">Live Price</span>
+                <span className="font-mono text-xl font-bold text-[#b6ff3b] tabular-nums">{livePrice}</span>
+              </div>
             </div>
           </div>
 
