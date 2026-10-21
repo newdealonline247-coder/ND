@@ -25,7 +25,6 @@ export default function RealChart({ symbol, trades, onPriceTick }: RealChartProp
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Determine base price based on symbol
     let basePrice = 1.08500;
     if (symbol.includes('BTC')) basePrice = 96400.00;
     else if (symbol.includes('ETH')) basePrice = 2750.00;
@@ -34,7 +33,6 @@ export default function RealChart({ symbol, trades, onPriceTick }: RealChartProp
 
     currentPriceRef.current = basePrice;
 
-    // Create Lightweight Chart
     const chart = createChart(containerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: '#080c11' },
@@ -58,10 +56,9 @@ export default function RealChart({ symbol, trades, onPriceTick }: RealChartProp
         vertLine: { color: '#b6ff3b', width: 1, style: LineStyle.Dashed },
         horzLine: { color: '#b6ff3b', width: 1, style: LineStyle.Dashed },
       },
-      autosize: true,
+      autoSize: true,
     });
 
-    // Create Area / Line Series
     const series = chart.addAreaSeries({
       topColor: 'rgba(182, 255, 59, 0.25)',
       bottomColor: 'rgba(182, 255, 59, 0.00)',
@@ -70,7 +67,6 @@ export default function RealChart({ symbol, trades, onPriceTick }: RealChartProp
     });
     seriesRef.current = series;
 
-    // Generate historical ticks
     const now = Math.floor(Date.now() / 1000);
     const initialData = [];
     let price = basePrice;
@@ -86,7 +82,6 @@ export default function RealChart({ symbol, trades, onPriceTick }: RealChartProp
     series.setData(initialData);
     chart.timeScale().fitContent();
 
-    // High frequency live price ticker (ticks every 400ms)
     const interval = setInterval(() => {
       const volatility = basePrice * 0.0002;
       const change = (Math.random() - 0.495) * volatility;
@@ -105,13 +100,11 @@ export default function RealChart({ symbol, trades, onPriceTick }: RealChartProp
       clearInterval(interval);
       chart.remove();
     };
-  }, [symbol]);
+  }, [symbol, onPriceTick]);
 
-  // Sync Price Lines with Active Trades
   useEffect(() => {
     if (!seriesRef.current) return;
 
-    // Remove lines for closed/expired trades
     priceLinesRef.current.forEach((line, tradeId) => {
       if (!trades.find((t) => t.id === tradeId)) {
         seriesRef.current?.removePriceLine(line);
@@ -119,7 +112,6 @@ export default function RealChart({ symbol, trades, onPriceTick }: RealChartProp
       }
     });
 
-    // Add lines for new active trades at exact strike price
     trades.forEach((trade) => {
       if (!priceLinesRef.current.has(trade.id)) {
         const line = seriesRef.current?.createPriceLine({
