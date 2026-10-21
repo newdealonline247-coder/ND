@@ -65,7 +65,6 @@ export default function RealChart({ symbol, trades, chartType, showSMA, onPriceT
       autoSize: true,
     });
 
-    // Main Series (Candlestick or Area)
     let mainSeries: ISeriesApi<any>;
     if (chartType === 'candlestick') {
       mainSeries = chart.addSeries(CandlestickSeries, {
@@ -85,11 +84,10 @@ export default function RealChart({ symbol, trades, chartType, showSMA, onPriceT
     }
     seriesRef.current = mainSeries;
 
-    // Moving Average (SMA 20) Indicator Line
     if (showSMA) {
       const smaSeries = chart.addSeries(LineSeries, {
         color: '#3b82f6',
-        lineWidth: 1.5,
+        lineWidth: 1,
         title: 'SMA 20',
       });
       smaSeriesRef.current = smaSeries;
@@ -129,7 +127,6 @@ export default function RealChart({ symbol, trades, chartType, showSMA, onPriceT
 
     chart.timeScale().fitContent();
 
-    // High frequency live candle tick
     let currentCandleOpen = price;
     let currentCandleHigh = price;
     let currentCandleLow = price;
@@ -175,7 +172,6 @@ export default function RealChart({ symbol, trades, chartType, showSMA, onPriceT
     };
   }, [symbol, chartType, showSMA, onPriceTick]);
 
-  // Sync Price Lines with Trades
   useEffect(() => {
     if (!seriesRef.current) return;
 
