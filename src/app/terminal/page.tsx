@@ -72,48 +72,84 @@ export default function TerminalPage() {
     pricesRef.current = prices;
   }, [prices]);
 
-  // Real Live WebSockets Feed (Binance + Deriv)
+  // Robust Live WebSockets Feed (Binance for Crypto + Deriv with Ping for Forex/Gold)
   useEffect(() => {
     let wsCrypto: WebSocket | null = null;
     let wsForex: WebSocket | null = null;
+    let pingInterval: NodeJS.Timeout | null = null;
 
-    try {
-      wsCrypto = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@ticker/ethusdt@ticker');
-      wsCrypto.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        if (data && data.s) {
-          const price = parseFloat(data.c);
-          if (data.s === 'BTCUSDT') {
-            setPrices(prev => ({ ...prev, 'BINANCE:BTCUSDT': price }));
-          } else if (data.s === 'ETHUSDT') {
-            setPrices(prev => ({ ...prev, 'BINANCE:ETHUSDT': price }));
+    // 1. Crypto Live WebSocket (Binance)
+    const connectCrypto = () => {
+      try {
+        wsCrypto = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@ticker/ethusdt@ticker');
+        wsCrypto.onmessage = (e) => {
+          const data = JSON.parse(e.data);
+          if (data && data.s) {
+            const price = parseFloat(data.c);
+            if (data.s === 'BTCUSDT') {
+              setPrices(prev => ({ ...prev, 'BINANCE:BTCUSDT': price }));
+            } else if (data.s === 'ETHUSDT') {
+              setPrices(prev => ({ ...prev, 'BINANCE:ETHUSDT': price }));
+            }
           }
-        }
-      };
-    } catch (err) {}
+        };
+      } catch (err) {}
+    };
 
-    try {
-      wsForex = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
-      wsForex.onopen = () => {
-        const symbols = ['frxEURUSD', 'frxGBPUSD', 'frxAUDUSD', 'frxUSDCAD', 'frxUSDTRY', 'frxXAUUSD'];
-        symbols.forEach(s => wsForex?.send(JSON.stringify({ ticks: s })));
-      };
-      wsForex.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        if (data && data.tick) {
-          const s = data.tick.symbol;
-          const q = parseFloat(data.tick.quote);
-          if (s === 'frxGBPUSD') setPrices(prev => ({ ...prev, 'OANDA:GBPUSD': q }));
-          if (s === 'frxEURUSD') setPrices(prev => ({ ...prev, 'OANDA:EURUSD': q }));
-          if (s === 'frxAUDUSD') setPrices(prev => ({ ...prev, 'OANDA:AUDUSD': q }));
-          if (s === 'frxUSDCAD') setPrices(prev => ({ ...prev, 'OANDA:USDCAD': q }));
-          if (s === 'frxUSDTRY') setPrices(prev => ({ ...prev, 'OANDA:USDTRY': q }));
-          if (s === 'frxXAUUSD') setPrices(prev => ({ ...prev, 'OANDA:XAUUSD': q }));
-        }
-      };
-    } catch (err) {}
+    // 2. Forex & Gold Live WebSocket (Deriv API with Keep-Alive Ping)
+    const connectForex = () => {
+      try {
+        wsForex = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+
+        wsForex.onopen = () => {
+          const forexSymbols = ['frxEURUSD', 'frxGBPUSD', 'frxAUDUSD', 'frxUSDCAD', 'frxUSDTRY', 'frxXAUUSD'];
+          forexSymbols.forEach(s => {
+            if (wsForex?.readyState === WebSocket.OPEN) {
+              wsForex.send(JSON.stringify({ ticks: s }));
+            }
+          });
+
+          // Send ping every 15s to keep Forex stream connected
+          pingInterval = setInterval(() => {
+            if (wsForex?.readyState === WebSocket.OPEN) {
+              wsForex.send(JSON.stringify({ ping: 1 }));
+            }
+          }, 15000);
+        };
+
+        wsForex.onmessage = (e) => {
+          const data = JSON.parse(e.data);
+          if (data && data.tick) {
+            const symbol = data.tick.symbol;
+            const quote = parseFloat(data.tick.quote);
+
+            const map: Record<string, string> = {
+              'frxGBPUSD': 'OANDA:GBPUSD',
+              'frxEURUSD': 'OANDA:EURUSD',
+              'frxAUDUSD': 'OANDA:AUDUSD',
+              'frxUSDCAD': 'OANDA:USDCAD',
+              'frxUSDTRY': 'OANDA:USDTRY',
+              'frxXAUUSD': 'OANDA:XAUUSD'
+            };
+
+            const mappedSymbol = map[symbol];
+            if (mappedSymbol) {
+              setPrices(prev => ({ ...prev, [mappedSymbol]: quote }));
+            }
+          }
+        };
+
+        wsForex.onclose = () => {
+          setTimeout(connectForex, 3000); // Auto-reconnect if dropped
+        };
+      } catch (err) {}
+    };
+
+    connectCrypto();
+    connectForex();
 
     return () => {
+      if (pingInterval) clearInterval(pingInterval);
       wsCrypto?.close();
       wsForex?.close();
     };
