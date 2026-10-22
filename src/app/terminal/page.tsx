@@ -36,14 +36,14 @@ interface SettledTrade {
 }
 
 const ASSETS = [
-  { symbol: 'OANDA:GBPUSD', name: 'GBP/USD', payout: 0.88, basePrice: 1.34050 },
-  { symbol: 'OANDA:EURUSD', name: 'EUR/USD', payout: 0.92, basePrice: 1.11990 },
-  { symbol: 'OANDA:USDTRY', name: 'USD/TRY', payout: 0.85, basePrice: 36.2500 },
-  { symbol: 'OANDA:USDCAD', name: 'USD/CAD', payout: 0.87, basePrice: 1.42500 },
-  { symbol: 'OANDA:AUDUSD', name: 'AUD/USD', payout: 0.86, basePrice: 0.70150 },
+  { symbol: 'BINANCE:EURUSDT', name: 'EUR/USD', payout: 0.92, basePrice: 1.08500 },
+  { symbol: 'BINANCE:GBPUSDT', name: 'GBP/USD', payout: 0.88, basePrice: 1.26520 },
+  { symbol: 'BINANCE:AUDUSDT', name: 'AUD/USD', payout: 0.86, basePrice: 0.65410 },
   { symbol: 'BINANCE:BTCUSDT', name: 'BTC/USDT', payout: 0.90, basePrice: 96400.00 },
-  { symbol: 'BINANCE:ETHUSDT', name: 'ETH/USDT', payout: 0.89, basePrice: 2411.70 },
-  { symbol: 'OANDA:XAUUSD', name: 'GOLD', payout: 0.95, basePrice: 2650.00 },
+  { symbol: 'BINANCE:ETHUSDT', name: 'ETH/USDT', payout: 0.89, basePrice: 2750.00 },
+  { symbol: 'BINANCE:PAXGUSDT', name: 'GOLD', payout: 0.95, basePrice: 2650.00 },
+  { symbol: 'OANDA:USDCAD', name: 'USD/CAD', payout: 0.87, basePrice: 1.35820 },
+  { symbol: 'OANDA:USDTRY', name: 'USD/TRY', payout: 0.85, basePrice: 32.1450 },
 ];
 
 export default function TerminalPage() {
@@ -51,7 +51,7 @@ export default function TerminalPage() {
   const [isDemo, setIsDemo] = useState(true);
   const [investment, setInvestment] = useState(10);
   const [duration, setDuration] = useState(30);
-  const [selectedAsset, setSelectedAsset] = useState(ASSETS[1]); // Default EUR/USD
+  const [selectedAsset, setSelectedAsset] = useState(ASSETS[0]); // EUR/USD default
   const [assetDropdownOpen, setAssetDropdownOpen] = useState(false);
   const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
   const [tradeHistory, setTradeHistory] = useState<SettledTrade[]>([]);
@@ -70,38 +70,26 @@ export default function TerminalPage() {
   const pricesRef = useRef(prices);
   useEffect(() => { pricesRef.current = prices; }, [prices]);
 
-  // 1. Fetch Real Live Forex Exchange Rates on Load
-  useEffect(() => {
-    fetch('https://open.er-api.com/v6/latest/USD')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.rates) {
-          const r = data.rates;
-          setPrices(prev => ({
-            ...prev,
-            'OANDA:EURUSD': r.EUR ? parseFloat((1 / r.EUR).toFixed(5)) : prev['OANDA:EURUSD'],
-            'OANDA:GBPUSD': r.GBP ? parseFloat((1 / r.GBP).toFixed(5)) : prev['OANDA:GBPUSD'],
-            'OANDA:AUDUSD': r.AUD ? parseFloat((1 / r.AUD).toFixed(5)) : prev['OANDA:AUDUSD'],
-            'OANDA:USDCAD': r.CAD ? parseFloat(r.CAD.toFixed(5)) : prev['OANDA:USDCAD'],
-            'OANDA:USDTRY': r.TRY ? parseFloat(r.TRY.toFixed(5)) : prev['OANDA:USDTRY'],
-          }));
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  // 2. Real Live Binance WebSockets for Crypto
+  // 1. Direct Real-Time Exchange WebSockets for 100% Exact Matching
   useEffect(() => {
     let ws: WebSocket | null = null;
     try {
-      ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@ticker/ethusdt@ticker');
+      ws = new WebSocket('wss://stream.binance.com:9443/ws/eurusdt@ticker/gbpusdt@ticker/audusdt@ticker/btcusdt@ticker/ethusdt@ticker/paxgusdt@ticker');
       ws.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);
           if (data && data.s && data.c) {
             const price = parseFloat(data.c);
             if (!isNaN(price)) {
-              const key = data.s === 'BTCUSDT' ? 'BINANCE:BTCUSDT' : data.s === 'ETHUSDT' ? 'BINANCE:ETHUSDT' : null;
+              const map: Record<string, string> = {
+                'EURUSDT': 'BINANCE:EURUSDT',
+                'GBPUSDT': 'BINANCE:GBPUSDT',
+                'AUDUSDT': 'BINANCE:AUDUSDT',
+                'BTCUSDT': 'BINANCE:BTCUSDT',
+                'ETHUSDT': 'BINANCE:ETHUSDT',
+                'PAXGUSDT': 'BINANCE:PAXGUSDT'
+              };
+              const key = map[data.s];
               if (key) {
                 setPrices(prev => {
                   const old = prev[key] || price;
@@ -117,18 +105,16 @@ export default function TerminalPage() {
     return () => { ws?.close(); };
   }, []);
 
-  // 3. Live Price Micro-ticks for Forex & Gold
+  // 2. Ticks for remaining assets (USD/CAD, USD/TRY)
   useEffect(() => {
     const interval = setInterval(() => {
       setPrices(prev => {
         const next = { ...prev };
         ASSETS.forEach(asset => {
-          if (asset.symbol.includes('BINANCE')) return; // Crypto handled by Binance WS
+          if (asset.symbol.includes('BINANCE')) return;
           const current = prev[asset.symbol] || asset.basePrice;
-          const isGold = asset.symbol.includes('XAU');
-          const scale = isGold ? 0.20 : 0.00004;
-          const change = (Math.random() - 0.5) * scale;
-          const updated = parseFloat((current + change).toFixed(isGold ? 2 : 5));
+          const change = (Math.random() - 0.5) * 0.00006;
+          const updated = parseFloat((current + change).toFixed(5));
           next[asset.symbol] = updated;
           setPriceDirections(d => ({ ...d, [asset.symbol]: updated >= current ? 'up' : 'down' }));
         });
@@ -212,8 +198,9 @@ export default function TerminalPage() {
 
   const currentPrice = prices[selectedAsset.symbol] || selectedAsset.basePrice;
   const currentDirection = priceDirections[selectedAsset.symbol] || 'up';
-  const isCrypto = selectedAsset.symbol.includes('BINANCE') || selectedAsset.symbol.includes('XAU');
-  const displayPrice = isCrypto
+  const isLargeNumber = selectedAsset.symbol.includes('BTC') || selectedAsset.symbol.includes('ETH') || selectedAsset.symbol.includes('PAXG');
+  
+  const displayPrice = isLargeNumber
     ? currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : currentPrice.toFixed(5);
 
@@ -231,8 +218,7 @@ export default function TerminalPage() {
               onClick={() => setAssetDropdownOpen(!assetDropdownOpen)}
               className="flex items-center space-x-2 bg-[#161c24] hover:bg-[#1f2733] border border-gray-800 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
             >
-              <span>{selectedAsset.symbol.split(':')[1] || selectedAsset.symbol}</span>
-              <span className="text-gray-400">{selectedAsset.name}</span>
+              <span>{selectedAsset.name}</span>
               <span className="text-[#b6ff3b] font-mono">+{Math.round(selectedAsset.payout * 100)}%</span>
             </button>
 
