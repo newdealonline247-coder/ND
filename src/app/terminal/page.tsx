@@ -54,7 +54,7 @@ interface SettledTrade {
 }
 
 const ASSETS = [
-  { symbol: 'OANDA:GBPUSD', name: 'GBP/USD', payout: 0.88, basePrice: 1.34069 },
+  { symbol: 'OANDA:GBPUSD', name: 'GBP/USD', payout: 0.88, basePrice: 1.33940 },
   { symbol: 'OANDA:EURUSD', name: 'EUR/USD', payout: 0.92, basePrice: 1.12383 },
   { symbol: 'OANDA:USDTRY', name: 'USD/TRY', payout: 0.85, basePrice: 32.1450 },
   { symbol: 'OANDA:USDCAD', name: 'USD/CAD', payout: 0.87, basePrice: 1.35820 },
@@ -115,7 +115,7 @@ export default function TerminalPage() {
           const isCryptoOrGold = asset.symbol.includes('CRYPTO') || asset.symbol.includes('XAU');
           const scale = isCryptoOrGold ? 0.35 : 0.00008;
           // Unbiased 50/50 random step (-0.5 to +0.5)
-          const change = (Math.random() - 0.5) * scale;
+          const change = (Math.random() - 0.5) * scale - (current - asset.basePrice) * 0.08;
           const updated = parseFloat((current + change).toFixed(isCryptoOrGold ? 2 : 5));
 
           nextPrices[asset.symbol] = updated;
