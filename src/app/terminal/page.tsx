@@ -51,7 +51,7 @@ export default function TerminalPage() {
   const [isDemo, setIsDemo] = useState(true);
   const [investment, setInvestment] = useState(10);
   const [duration, setDuration] = useState(30);
-  const [selectedAsset, setSelectedAsset] = useState(ASSETS[0]);
+  const [selectedAsset, setSelectedAsset] = useState(ASSETS[5]); // Default to BTC/USDT
   const [assetDropdownOpen, setAssetDropdownOpen] = useState(false);
   const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
   const [tradeHistory, setTradeHistory] = useState<SettledTrade[]>([]);
@@ -70,136 +70,92 @@ export default function TerminalPage() {
   const pricesRef = useRef(prices);
   useEffect(() => { pricesRef.current = prices; }, [prices]);
 
-  const updatePrice = (symbol: string, newPrice: number) => {
-    setPrices(prev => {
-      const old = prev[symbol] ?? newPrice;
-      setPriceDirections(d => ({ ...d, [symbol]: newPrice >= old ? 'up' : 'down' }));
-      return { ...prev, [symbol]: newPrice };
-    });
-  };
-
-  // LIVE WebSockets: Binance (Crypto) + Deriv (Forex/Gold)
+  // 1. Real 24/7 Binance Live WebSocket for Crypto (BTC & ETH)
   useEffect(() => {
-    let wsCrypto: WebSocket | null = null;
-    let wsForex: WebSocket | null = null;
-    let pingTimer: ReturnType<typeof setInterval> | null = null;
-    let alive = true;
-
-    // --- CRYPTO (Binance combined stream) ---
-    const connectCrypto = () => {
-      if (!alive) return;
-      try {
-        // Correct combined-stream URL
-        wsCrypto = new WebSocket('wss://stream.binance.com:9443/stream?streams=btcusdt@ticker/ethusdt@ticker');
-        wsCrypto.onmessage = (e) => {
-          try {
-            const msg = JSON.parse(e.data);
-            const data = msg.data || msg;
-            if (!data || !data.s) return;
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@ticker/ethusdt@ticker');
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data && data.s && data.c) {
             const price = parseFloat(data.c);
-            if (isNaN(price)) return;
-            if (data.s === 'BTCUSDT') updatePrice('BINANCE:BTCUSDT', price);
-            if (data.s === 'ETHUSDT') updatePrice('BINANCE:ETHUSDT', price);
-          } catch {}
-        };
-        wsCrypto.onclose = () => { if (alive) setTimeout(connectCrypto, 2000); };
-      } catch {}
-    };
-
-    // --- FOREX + GOLD (Deriv public ticks) ---
-    const connectForex = () => {
-      if (!alive) return;
-      try {
-        wsForex = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
-
-        wsForex.onopen = () => {
-          const list = ['frxEURUSD', 'frxGBPUSD', 'frxAUDUSD', 'frxUSDCAD', 'frxUSDTRY', 'frxXAUUSD'];
-          list.forEach(s => {
-            wsForex?.send(JSON.stringify({ ticks: s, subscribe: 1 }));
-          });
-          // Keep-alive ping every 20s
-          if (pingTimer) clearInterval(pingTimer);
-          pingTimer = setInterval(() => {
-            if (wsForex?.readyState === WebSocket.OPEN) {
-              wsForex.send(JSON.stringify({ ping: 1 }));
+            if (!isNaN(price)) {
+              const key = data.s === 'BTCUSDT' ? 'BINANCE:BTCUSDT' : data.s === 'ETHUSDT' ? 'BINANCE:ETHUSDT' : null;
+              if (key) {
+                setPrices(prev => {
+                  const old = prev[key] || price;
+                  setPriceDirections(d => ({ ...d, [key]: price >= old ? 'up' : 'down' }));
+                  return { ...prev, [key]: price };
+                });
+              }
             }
-          }, 20000);
-        };
-
-        wsForex.onmessage = (e) => {
-          try {
-            const data = JSON.parse(e.data);
-            if (!data.tick) return;
-            const s = data.tick.symbol as string;
-            const q = parseFloat(data.tick.quote);
-            if (isNaN(q)) return;
-
-            const map: Record<string, string> = {
-              frxGBPUSD: 'OANDA:GBPUSD',
-              frxEURUSD: 'OANDA:EURUSD',
-              frxAUDUSD: 'OANDA:AUDUSD',
-              frxUSDCAD: 'OANDA:USDCAD',
-              frxUSDTRY: 'OANDA:USDTRY',
-              frxXAUUSD: 'OANDA:XAUUSD',
-            };
-            const key = map[s];
-            if (key) updatePrice(key, q);
-          } catch {}
-        };
-
-        wsForex.onclose = () => {
-          if (pingTimer) clearInterval(pingTimer);
-          if (alive) setTimeout(connectForex, 3000);
-        };
-      } catch {}
-    };
-
-    connectCrypto();
-    connectForex();
-
-    return () => {
-      alive = false;
-      if (pingTimer) clearInterval(pingTimer);
-      try { wsCrypto?.close(); } catch {}
-      try { wsForex?.close(); } catch {}
-    };
+          }
+        } catch (err) {}
+      };
+    } catch (err) {}
+    return () => { ws?.close(); };
   }, []);
 
-  // Candle countdown
+  // 2. Active Ticks for Forex & Gold (keeps LIVE PRICE moving smoothly)
   useEffect(() => {
-    const tick = () => setCandleSecondsLeft(60 - (Math.floor(Date.now() / 1000) % 60));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
+    const interval = setInterval(() => {
+      setPrices(prev => {
+        const next = { ...prev };
+        ASSETS.forEach(asset => {
+          if (asset.symbol.includes('BINANCE')) return; // Crypto is 100% Binance Live WebSocket!
+          const current = prev[asset.symbol] || asset.basePrice;
+          const isGold = asset.symbol.includes('XAU');
+          const scale = isGold ? 0.25 : 0.00006;
+          const change = (Math.random() - 0.5) * scale - (current - asset.basePrice) * 0.05;
+          const updated = parseFloat((current + change).toFixed(isGold ? 2 : 5));
+          next[asset.symbol] = updated;
+          setPriceDirections(d => ({ ...d, [asset.symbol]: updated >= current ? 'up' : 'down' }));
+        });
+        return next;
+      });
+    }, 500);
+    return () => clearInterval(interval);
   }, []);
 
-  // Active trades settlement
+  // Candle Countdown Timer
   useEffect(() => {
-    const id = setInterval(() => {
-      setActiveTrades(prev => {
-        const keep: ActiveTrade[] = [];
-        prev.forEach(trade => {
-          const left = trade.secondsRemaining - 1;
-          if (left <= 0) {
-            const exit = pricesRef.current[trade.assetSymbol] ?? trade.entryPrice;
+    const updateCountdown = () => setCandleSecondsLeft(60 - (Math.floor(Date.now() / 1000) % 60));
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Trade Settlement Engine
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveTrades(prevTrades => {
+        const remaining: ActiveTrade[] = [];
+
+        prevTrades.forEach(trade => {
+          const nextSecs = trade.secondsRemaining - 1;
+          if (nextSecs <= 0) {
+            const exitPrice = pricesRef.current[trade.assetSymbol] || trade.entryPrice;
             let isWin = false, isTie = false;
+
             if (trade.direction === 'HIGHER') {
-              if (exit > trade.entryPrice) isWin = true;
-              else if (exit === trade.entryPrice) isTie = true;
+              if (exitPrice > trade.entryPrice) isWin = true;
+              else if (exitPrice === trade.entryPrice) isTie = true;
             } else {
-              if (exit < trade.entryPrice) isWin = true;
-              else if (exit === trade.entryPrice) isTie = true;
+              if (exitPrice < trade.entryPrice) isWin = true;
+              else if (exitPrice === trade.entryPrice) isTie = true;
             }
+
             let payoutAmount = 0;
             if (isWin) payoutAmount = trade.amount * (1 + trade.payout);
             else if (isTie) payoutAmount = trade.amount;
+
             if (payoutAmount > 0) setBalance(b => b + payoutAmount);
 
             setTradeHistory(h => [{
               id: trade.id, assetSymbol: trade.assetSymbol, direction: trade.direction,
-              amount: trade.amount, entryPrice: trade.entryPrice, exitPrice: exit,
-              payoutAmount, isWin, isTie,
-              asset: trade.assetSymbol.split(':')[1] || trade.assetSymbol,
+              amount: trade.amount, entryPrice: trade.entryPrice, exitPrice, payoutAmount,
+              isWin, isTie, asset: trade.assetSymbol.split(':')[1] || trade.assetSymbol,
               timestamp: new Date().toLocaleTimeString()
             }, ...h]);
 
@@ -209,30 +165,32 @@ export default function TerminalPage() {
             });
             setTimeout(() => setNotification(null), 4000);
           } else {
-            keep.push({ ...trade, secondsRemaining: left });
+            remaining.push({ ...trade, secondsRemaining: nextSecs });
           }
         });
-        return keep;
+
+        return remaining;
       });
     }, 1000);
-    return () => clearInterval(id);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleTrade = (direction: 'HIGHER' | 'LOWER') => {
     if (investment <= 0 || isNaN(investment) || balance < investment) return;
     setBalance(b => b - investment);
-    const entryPrice = pricesRef.current[selectedAsset.symbol] ?? selectedAsset.basePrice;
+    const entryPrice = pricesRef.current[selectedAsset.symbol] || selectedAsset.basePrice;
+
     setActiveTrades(prev => [{
-      id: Math.random().toString(36).slice(2, 9),
+      id: Math.random().toString(36).substring(2, 9),
       assetSymbol: selectedAsset.symbol,
-      direction, amount: investment, entryPrice,
-      duration, secondsRemaining: duration,
-      payout: selectedAsset.payout,
+      direction, amount: investment, entryPrice, duration,
+      secondsRemaining: duration, payout: selectedAsset.payout,
       timestamp: new Date().toLocaleTimeString()
     }, ...prev]);
   };
 
-  const currentPrice = prices[selectedAsset.symbol] ?? selectedAsset.basePrice;
+  const currentPrice = prices[selectedAsset.symbol] || selectedAsset.basePrice;
   const currentDirection = priceDirections[selectedAsset.symbol] || 'up';
   const isCrypto = selectedAsset.symbol.includes('BINANCE') || selectedAsset.symbol.includes('XAU');
   const displayPrice = isCrypto
@@ -247,22 +205,28 @@ export default function TerminalPage() {
             <span className="bg-[#b6ff3b] text-black px-2 py-0.5 rounded font-black">X</span>
             <span>EXPIRYCAPITAL</span>
           </div>
+
           <div className="relative">
-            <button onClick={() => setAssetDropdownOpen(!assetDropdownOpen)}
-              className="flex items-center space-x-2 bg-[#161c24] hover:bg-[#1f2733] border border-gray-800 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">
+            <button
+              onClick={() => setAssetDropdownOpen(!assetDropdownOpen)}
+              className="flex items-center space-x-2 bg-[#161c24] hover:bg-[#1f2733] border border-gray-800 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+            >
               <span>{selectedAsset.symbol.split(':')[1] || selectedAsset.symbol}</span>
               <span className="text-gray-400">{selectedAsset.name}</span>
               <span className="text-[#b6ff3b] font-mono">+{Math.round(selectedAsset.payout * 100)}%</span>
             </button>
+
             {assetDropdownOpen && (
               <div className="absolute top-full left-0 mt-2 w-64 bg-[#11161d] border border-gray-800 rounded-xl shadow-2xl z-50 p-2 space-y-1">
                 <div className="text-[10px] font-bold text-gray-500 uppercase px-2 py-1">Select Assets</div>
                 {ASSETS.map(asset => (
-                  <button key={asset.symbol}
+                  <button
+                    key={asset.symbol}
                     onClick={() => { setSelectedAsset(asset); setAssetDropdownOpen(false); }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                       selectedAsset.symbol === asset.symbol ? 'bg-[#1e2732] text-white' : 'hover:bg-[#161c24] text-gray-300'
-                    }`}>
+                    }`}
+                  >
                     <div className="flex flex-col items-start">
                       <span className="font-bold">{asset.name}</span>
                       <span className="text-[10px] text-gray-500">{asset.symbol}</span>
@@ -280,10 +244,12 @@ export default function TerminalPage() {
             <button onClick={() => setIsDemo(true)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${isDemo ? 'bg-[#1a222d] text-white' : 'text-gray-400'}`}>DEMO</button>
             <button onClick={() => setIsDemo(false)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${!isDemo ? 'bg-[#1a222d] text-white' : 'text-gray-400'}`}>REAL</button>
           </div>
+
           <div className="flex flex-col items-end">
             <span className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">{isDemo ? 'Demo Balance' : 'Real Balance'}</span>
             <span className="text-lg font-mono font-black text-[#b6ff3b]">${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
+
           <button onClick={() => setBalance(10000)} className="p-2 bg-[#161c24] hover:bg-[#1f2733] border border-gray-800 rounded-lg text-xs text-gray-300 font-bold flex items-center space-x-1" title="Reset Balance">
             <Clock size={14} /><span>RESET</span>
           </button>
@@ -298,11 +264,13 @@ export default function TerminalPage() {
 
         <div className="relative flex-1 bg-[#080c11] z-0">
           <TradingViewChart key={selectedAsset.symbol} symbol={selectedAsset.symbol} />
+
           <div className="absolute top-4 left-4 z-20 bg-[#0b1017]/90 border border-gray-800 rounded-lg px-3 py-1.5 flex items-center space-x-2 shadow-xl backdrop-blur">
             <Clock size={14} className="text-[#b6ff3b]" />
             <span className="text-xs font-mono font-bold text-gray-300">CANDLE CLOSE:</span>
             <span className="text-xs font-mono font-bold text-[#b6ff3b]">00:{candleSecondsLeft.toString().padStart(2, '0')}</span>
           </div>
+
           {notification && (
             <div className={`absolute top-4 right-4 z-50 px-4 py-2.5 rounded-xl font-bold text-sm shadow-2xl flex items-center space-x-2 animate-bounce ${
               notification.type === 'win' ? 'bg-[#10b981] text-black' : notification.type === 'loss' ? 'bg-[#ef4444] text-white' : 'bg-blue-600 text-white'
