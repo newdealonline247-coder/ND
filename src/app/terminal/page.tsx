@@ -36,13 +36,13 @@ interface SettledTrade {
 }
 
 const ASSETS = [
-  { symbol: 'OANDA:GBPUSD', name: 'GBP/USD', payout: 0.88, basePrice: 1.26520 },
-  { symbol: 'OANDA:EURUSD', name: 'EUR/USD', payout: 0.92, basePrice: 1.08500 },
-  { symbol: 'OANDA:USDTRY', name: 'USD/TRY', payout: 0.85, basePrice: 32.1450 },
-  { symbol: 'OANDA:USDCAD', name: 'USD/CAD', payout: 0.87, basePrice: 1.35820 },
-  { symbol: 'OANDA:AUDUSD', name: 'AUD/USD', payout: 0.86, basePrice: 0.65410 },
+  { symbol: 'OANDA:GBPUSD', name: 'GBP/USD', payout: 0.88, basePrice: 1.34050 },
+  { symbol: 'OANDA:EURUSD', name: 'EUR/USD', payout: 0.92, basePrice: 1.11990 },
+  { symbol: 'OANDA:USDTRY', name: 'USD/TRY', payout: 0.85, basePrice: 36.2500 },
+  { symbol: 'OANDA:USDCAD', name: 'USD/CAD', payout: 0.87, basePrice: 1.42500 },
+  { symbol: 'OANDA:AUDUSD', name: 'AUD/USD', payout: 0.86, basePrice: 0.70150 },
   { symbol: 'BINANCE:BTCUSDT', name: 'BTC/USDT', payout: 0.90, basePrice: 96400.00 },
-  { symbol: 'BINANCE:ETHUSDT', name: 'ETH/USDT', payout: 0.89, basePrice: 2750.00 },
+  { symbol: 'BINANCE:ETHUSDT', name: 'ETH/USDT', payout: 0.89, basePrice: 2411.70 },
   { symbol: 'OANDA:XAUUSD', name: 'GOLD', payout: 0.95, basePrice: 2650.00 },
 ];
 
@@ -51,7 +51,7 @@ export default function TerminalPage() {
   const [isDemo, setIsDemo] = useState(true);
   const [investment, setInvestment] = useState(10);
   const [duration, setDuration] = useState(30);
-  const [selectedAsset, setSelectedAsset] = useState(ASSETS[5]); // Default to BTC/USDT
+  const [selectedAsset, setSelectedAsset] = useState(ASSETS[1]); // Default EUR/USD
   const [assetDropdownOpen, setAssetDropdownOpen] = useState(false);
   const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
   const [tradeHistory, setTradeHistory] = useState<SettledTrade[]>([]);
@@ -70,7 +70,27 @@ export default function TerminalPage() {
   const pricesRef = useRef(prices);
   useEffect(() => { pricesRef.current = prices; }, [prices]);
 
-  // 1. Real 24/7 Binance Live WebSocket for Crypto (BTC & ETH)
+  // 1. Fetch Real Live Forex Exchange Rates on Load
+  useEffect(() => {
+    fetch('https://open.er-api.com/v6/latest/USD')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.rates) {
+          const r = data.rates;
+          setPrices(prev => ({
+            ...prev,
+            'OANDA:EURUSD': r.EUR ? parseFloat((1 / r.EUR).toFixed(5)) : prev['OANDA:EURUSD'],
+            'OANDA:GBPUSD': r.GBP ? parseFloat((1 / r.GBP).toFixed(5)) : prev['OANDA:GBPUSD'],
+            'OANDA:AUDUSD': r.AUD ? parseFloat((1 / r.AUD).toFixed(5)) : prev['OANDA:AUDUSD'],
+            'OANDA:USDCAD': r.CAD ? parseFloat(r.CAD.toFixed(5)) : prev['OANDA:USDCAD'],
+            'OANDA:USDTRY': r.TRY ? parseFloat(r.TRY.toFixed(5)) : prev['OANDA:USDTRY'],
+          }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // 2. Real Live Binance WebSockets for Crypto
   useEffect(() => {
     let ws: WebSocket | null = null;
     try {
@@ -97,24 +117,24 @@ export default function TerminalPage() {
     return () => { ws?.close(); };
   }, []);
 
-  // 2. Active Ticks for Forex & Gold (keeps LIVE PRICE moving smoothly)
+  // 3. Live Price Micro-ticks for Forex & Gold
   useEffect(() => {
     const interval = setInterval(() => {
       setPrices(prev => {
         const next = { ...prev };
         ASSETS.forEach(asset => {
-          if (asset.symbol.includes('BINANCE')) return; // Crypto is 100% Binance Live WebSocket!
+          if (asset.symbol.includes('BINANCE')) return; // Crypto handled by Binance WS
           const current = prev[asset.symbol] || asset.basePrice;
           const isGold = asset.symbol.includes('XAU');
-          const scale = isGold ? 0.25 : 0.00006;
-          const change = (Math.random() - 0.5) * scale - (current - asset.basePrice) * 0.05;
+          const scale = isGold ? 0.20 : 0.00004;
+          const change = (Math.random() - 0.5) * scale;
           const updated = parseFloat((current + change).toFixed(isGold ? 2 : 5));
           next[asset.symbol] = updated;
           setPriceDirections(d => ({ ...d, [asset.symbol]: updated >= current ? 'up' : 'down' }));
         });
         return next;
       });
-    }, 500);
+    }, 400);
     return () => clearInterval(interval);
   }, []);
 
