@@ -56,9 +56,9 @@ interface SettledTrade {
 const ASSETS = [
   { symbol: 'OANDA:GBPUSD', name: 'GBP/USD', payout: 0.88, basePrice: 1.33940 },
   { symbol: 'OANDA:EURUSD', name: 'EUR/USD', payout: 0.92, basePrice: 1.12383 },
-  { symbol: 'OANDA:USDTRY', name: 'USD/TRY', payout: 0.85, basePrice: 32.1450 },
-  { symbol: 'OANDA:USDCAD', name: 'USD/CAD', payout: 0.87, basePrice: 1.35820 },
-  { symbol: 'OANDA:AUDUSD', name: 'AUD/USD', payout: 0.86, basePrice: 0.65410 },
+  { symbol: 'OANDA:USDTRY', name: 'USD/TRY', payout: 0.85, basePrice: 36.2500 },
+  { symbol: 'OANDA:USDCAD', name: 'USD/CAD', payout: 0.87, basePrice: 1.42500 },
+  { symbol: 'OANDA:AUDUSD', name: 'AUD/USD', payout: 0.86, basePrice: 0.70150 },
   { symbol: 'BINANCE:BTCUSDT', name: 'BTC/USDT', payout: 0.90, basePrice: 87450.00 },
   { symbol: 'BINANCE:ETHUSDT', name: 'ETH/USDT', payout: 0.89, basePrice: 3480.50 },
   { symbol: 'OANDA:XAUUSD', name: 'GOLD', payout: 0.95, basePrice: 2650.20 },
