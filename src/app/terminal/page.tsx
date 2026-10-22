@@ -54,14 +54,14 @@ interface SettledTrade {
 }
 
 const ASSETS = [
-  { symbol: 'FX:GBPUSD', name: 'GBP/USD OTC', payout: 0.88, basePrice: 1.26520 },
-  { symbol: 'FX:EURUSD', name: 'EUR/USD OTC', payout: 0.92, basePrice: 1.33910 },
-  { symbol: 'FX:USDTRY', name: 'USD/TRY OTC', payout: 0.85, basePrice: 32.1450 },
-  { symbol: 'FX:USDCAD', name: 'USD/CAD OTC', payout: 0.87, basePrice: 1.35820 },
-  { symbol: 'FX:AUDUSD', name: 'AUD/USD OTC', payout: 0.86, basePrice: 0.65410 },
-  { symbol: 'CRYPTO:BTCUSD', name: 'BTC/USDT OTC', payout: 0.90, basePrice: 64250.00 },
-  { symbol: 'CRYPTO:ETHUSD', name: 'ETH/USDT OTC', payout: 0.89, basePrice: 3480.50 },
-  { symbol: 'OANDA:XAUUSD', name: 'GOLD OTC', payout: 0.95, basePrice: 2345.80 },
+  { symbol: 'FX:GBPUSD', name: 'GBP/USD', payout: 0.88, basePrice: 1.26520 },
+  { symbol: 'FX:EURUSD', name: 'EUR/USD', payout: 0.92, basePrice: 1.33910 },
+  { symbol: 'FX:USDTRY', name: 'USD/TRY', payout: 0.85, basePrice: 32.1450 },
+  { symbol: 'FX:USDCAD', name: 'USD/CAD', payout: 0.87, basePrice: 1.35820 },
+  { symbol: 'FX:AUDUSD', name: 'AUD/USD', payout: 0.86, basePrice: 0.65410 },
+  { symbol: 'CRYPTO:BTCUSD', name: 'BTC/USDT', payout: 0.90, basePrice: 64250.00 },
+  { symbol: 'CRYPTO:ETHUSD', name: 'ETH/USDT', payout: 0.89, basePrice: 3480.50 },
+  { symbol: 'OANDA:XAUUSD', name: 'GOLD', payout: 0.95, basePrice: 2345.80 },
 ];
 
 export default function TerminalPage() {
@@ -289,7 +289,7 @@ export default function TerminalPage() {
             {assetDropdownOpen && (
               <div className="absolute top-full left-0 mt-2 w-64 bg-[#0b1017] border border-gray-800 rounded-xl shadow-2xl z-50 overflow-hidden py-1">
                 <div className="px-3 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800">
-                  Select OTC Assets
+                  Select Assets
                 </div>
                 {ASSETS.map((asset) => (
                   <button
