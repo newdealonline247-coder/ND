@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { Activity, TrendingUp, TrendingDown, Clock, History, BarChart2, CheckCircle2, XCircle, ChevronDown } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, Clock, History, BarChart2, CheckCircle2, XCircle, ChevronDown, Search } from 'lucide-react';
 
 const TradingViewChart = dynamic(
   () => import('@/components/terminal/TradingViewChart'),
@@ -36,9 +36,8 @@ interface SettledTrade {
 }
 
 const ASSETS = [
-  // 21 Forex Pairs
   { symbol: 'OANDA:EURUSD', name: 'EUR/USD', payout: 0.92, basePrice: 1.08500 },
-  { symbol: 'OANDA:GBPUSD', name: 'GBP/USD', payout: 0.88, basePrice: 1.26520 },
+  { symbol: 'OANDA:GBPUSD', name: 'GBP/USD', payout: 0.88, basePrice: 1.33850 },
   { symbol: 'OANDA:USDJPY', name: 'USD/JPY', payout: 0.89, basePrice: 154.500 },
   { symbol: 'OANDA:USDCHF', name: 'USD/CHF', payout: 0.87, basePrice: 0.88500 },
   { symbol: 'OANDA:AUDUSD', name: 'AUD/USD', payout: 0.86, basePrice: 0.65410 },
@@ -58,8 +57,6 @@ const ASSETS = [
   { symbol: 'OANDA:EURNZD', name: 'EUR/NZD', payout: 0.86, basePrice: 1.84500 },
   { symbol: 'OANDA:AUDCAD', name: 'AUD/CAD', payout: 0.85, basePrice: 0.90900 },
   { symbol: 'OANDA:USDTRY', name: 'USD/TRY', payout: 0.85, basePrice: 34.5000 },
-  
-  // Crypto & Commodities
   { symbol: 'BINANCE:BTCUSDT', name: 'BTC/USDT', payout: 0.90, basePrice: 96400.00 },
   { symbol: 'BINANCE:ETHUSDT', name: 'ETH/USDT', payout: 0.89, basePrice: 2750.00 },
   { symbol: 'OANDA:XAUUSD', name: 'GOLD', payout: 0.95, basePrice: 2650.00 },
@@ -70,8 +67,9 @@ export default function TerminalPage() {
   const [isDemo, setIsDemo] = useState(true);
   const [investment, setInvestment] = useState(10);
   const [duration, setDuration] = useState(30);
-  const [selectedAsset, setSelectedAsset] = useState(ASSETS[0]); // EUR/USD default
+  const [selectedAsset, setSelectedAsset] = useState(ASSETS[1]);
   const [assetDropdownOpen, setAssetDropdownOpen] = useState(false);
+  const [assetSearch, setAssetSearch] = useState('');
   const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
   const [tradeHistory, setTradeHistory] = useState<SettledTrade[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -83,45 +81,65 @@ export default function TerminalPage() {
     return initial;
   });
 
+  const [anchors, setAnchors] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    ASSETS.forEach(a => { initial[a.symbol] = a.basePrice; });
+    return initial;
+  });
+
   const [priceDirections, setPriceDirections] = useState<Record<string, 'up' | 'down'>>({});
   const [candleSecondsLeft, setCandleSecondsLeft] = useState(60);
 
   const pricesRef = useRef(prices);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => { pricesRef.current = prices; }, [prices]);
 
-  // 1. Calibrate ALL 21 Forex Pairs Live from Open Exchange API
+  // Click outside to close dropdown
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setAssetDropdownOpen(false);
+        setAssetSearch('');
+      }
+    };
+    if (assetDropdownOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [assetDropdownOpen]);
+
+  // Calibrate Forex from free live rates
   useEffect(() => {
     fetch('https://open.er-api.com/v6/latest/USD')
       .then(res => res.json())
       .then(data => {
-        if (data && data.rates) {
-          const r = data.rates;
-          const getRate = (base: string, quote: string) => {
-            if (base === 'USD') return r[quote] || 1;
-            if (quote === 'USD') return r[base] ? 1 / r[base] : 1;
-            if (r[base] && r[quote]) return r[quote] / r[base];
-            return 1;
-          };
-
-          setPrices(prev => {
-            const updated = { ...prev };
-            ASSETS.forEach(asset => {
-              if (asset.symbol.includes('BINANCE') || asset.symbol.includes('XAU')) return;
-              const [bCurr, qCurr] = asset.name.split('/');
-              if (bCurr && qCurr) {
-                const rate = getRate(bCurr, qCurr);
-                const isJpy = asset.name.includes('JPY');
-                updated[asset.symbol] = parseFloat(rate.toFixed(isJpy ? 3 : 5));
-              }
-            });
-            return updated;
+        if (!data?.rates) return;
+        const r = data.rates;
+        const getRate = (base: string, quote: string) => {
+          if (base === 'USD') return r[quote] || 1;
+          if (quote === 'USD') return r[base] ? 1 / r[base] : 1;
+          if (r[base] && r[quote]) return r[quote] / r[base];
+          return 1;
+        };
+        setPrices(prev => {
+          const updated = { ...prev };
+          const newAnchors: Record<string, number> = {};
+          ASSETS.forEach(asset => {
+            if (asset.symbol.includes('BINANCE') || asset.symbol.includes('XAU')) return;
+            const [b, q] = asset.name.split('/');
+            if (!b || !q) return;
+            const rate = getRate(b, q);
+            const isJpy = asset.name.includes('JPY');
+            const val = parseFloat(rate.toFixed(isJpy ? 3 : 5));
+            updated[asset.symbol] = val;
+            newAnchors[asset.symbol] = val;
           });
-        }
+          setAnchors(a => ({ ...a, ...newAnchors }));
+          return updated;
+        });
       })
       .catch(() => {});
   }, []);
 
-  // 2. Real Live Binance WebSockets for Crypto
+  // Binance live WebSocket (Crypto)
   useEffect(() => {
     let ws: WebSocket | null = null;
     try {
@@ -129,26 +147,24 @@ export default function TerminalPage() {
       ws.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);
-          if (data && data.s && data.c) {
-            const price = parseFloat(data.c);
-            if (!isNaN(price)) {
-              const key = data.s === 'BTCUSDT' ? 'BINANCE:BTCUSDT' : data.s === 'ETHUSDT' ? 'BINANCE:ETHUSDT' : null;
-              if (key) {
-                setPrices(prev => {
-                  const old = prev[key] || price;
-                  setPriceDirections(d => ({ ...d, [key]: price >= old ? 'up' : 'down' }));
-                  return { ...prev, [key]: price };
-                });
-              }
-            }
-          }
-        } catch (err) {}
+          if (!data?.s || !data?.c) return;
+          const price = parseFloat(data.c);
+          if (isNaN(price)) return;
+          const key = data.s === 'BTCUSDT' ? 'BINANCE:BTCUSDT' : data.s === 'ETHUSDT' ? 'BINANCE:ETHUSDT' : null;
+          if (!key) return;
+          setPrices(prev => {
+            const old = prev[key] || price;
+            setPriceDirections(d => ({ ...d, [key]: price >= old ? 'up' : 'down' }));
+            return { ...prev, [key]: price };
+          });
+          setAnchors(a => ({ ...a, [key]: price }));
+        } catch {}
       };
-    } catch (err) {}
+    } catch {}
     return () => { ws?.close(); };
   }, []);
 
-  // 3. Live Price Micro-ticks for Forex & Gold
+  // Forex/Gold micro-ticks with strong mean reversion (stays close to chart)
   useEffect(() => {
     const interval = setInterval(() => {
       setPrices(prev => {
@@ -156,58 +172,57 @@ export default function TerminalPage() {
         ASSETS.forEach(asset => {
           if (asset.symbol.includes('BINANCE')) return;
           const current = prev[asset.symbol] || asset.basePrice;
+          const anchor = anchors[asset.symbol] || asset.basePrice;
           const isGold = asset.symbol.includes('XAU');
           const isJpy = asset.name.includes('JPY');
-          const scale = isGold ? 0.20 : isJpy ? 0.015 : 0.00004;
-          const change = (Math.random() - 0.5) * scale;
+          const scale = isGold ? 0.12 : isJpy ? 0.008 : 0.000025;
+          // Strong pull back to anchor so it never drifts far from live rate
+          const change = (Math.random() - 0.5) * scale - (current - anchor) * 0.18;
           const updated = parseFloat((current + change).toFixed(isGold ? 2 : isJpy ? 3 : 5));
           next[asset.symbol] = updated;
           setPriceDirections(d => ({ ...d, [asset.symbol]: updated >= current ? 'up' : 'down' }));
         });
         return next;
       });
-    }, 400);
+    }, 350);
     return () => clearInterval(interval);
+  }, [anchors]);
+
+  // Candle countdown
+  useEffect(() => {
+    const tick = () => setCandleSecondsLeft(60 - (Math.floor(Date.now() / 1000) % 60));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, []);
 
-  // Candle Countdown Timer
+  // Trade settlement
   useEffect(() => {
-    const updateCountdown = () => setCandleSecondsLeft(60 - (Math.floor(Date.now() / 1000) % 60));
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Trade Settlement Engine
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveTrades(prevTrades => {
-        const remaining: ActiveTrade[] = [];
-
-        prevTrades.forEach(trade => {
-          const nextSecs = trade.secondsRemaining - 1;
-          if (nextSecs <= 0) {
-            const exitPrice = pricesRef.current[trade.assetSymbol] || trade.entryPrice;
+    const id = setInterval(() => {
+      setActiveTrades(prev => {
+        const keep: ActiveTrade[] = [];
+        prev.forEach(trade => {
+          const left = trade.secondsRemaining - 1;
+          if (left <= 0) {
+            const exit = pricesRef.current[trade.assetSymbol] ?? trade.entryPrice;
             let isWin = false, isTie = false;
-
             if (trade.direction === 'HIGHER') {
-              if (exitPrice > trade.entryPrice) isWin = true;
-              else if (exitPrice === trade.entryPrice) isTie = true;
+              if (exit > trade.entryPrice) isWin = true;
+              else if (exit === trade.entryPrice) isTie = true;
             } else {
-              if (exitPrice < trade.entryPrice) isWin = true;
-              else if (exitPrice === trade.entryPrice) isTie = true;
+              if (exit < trade.entryPrice) isWin = true;
+              else if (exit === trade.entryPrice) isTie = true;
             }
-
             let payoutAmount = 0;
             if (isWin) payoutAmount = trade.amount * (1 + trade.payout);
             else if (isTie) payoutAmount = trade.amount;
-
             if (payoutAmount > 0) setBalance(b => b + payoutAmount);
 
             setTradeHistory(h => [{
               id: trade.id, assetSymbol: trade.assetSymbol, direction: trade.direction,
-              amount: trade.amount, entryPrice: trade.entryPrice, exitPrice, payoutAmount,
-              isWin, isTie, asset: trade.assetSymbol.split(':')[1] || trade.assetSymbol,
+              amount: trade.amount, entryPrice: trade.entryPrice, exitPrice: exit,
+              payoutAmount, isWin, isTie,
+              asset: trade.assetSymbol.split(':')[1] || trade.assetSymbol,
               timestamp: new Date().toLocaleTimeString()
             }, ...h]);
 
@@ -217,42 +232,41 @@ export default function TerminalPage() {
             });
             setTimeout(() => setNotification(null), 4000);
           } else {
-            remaining.push({ ...trade, secondsRemaining: nextSecs });
+            keep.push({ ...trade, secondsRemaining: left });
           }
         });
-
-        return remaining;
+        return keep;
       });
     }, 1000);
-
-    return () => clearInterval(interval);
+    return () => clearInterval(id);
   }, []);
 
   const handleTrade = (direction: 'HIGHER' | 'LOWER') => {
     if (investment <= 0 || isNaN(investment) || balance < investment) return;
     setBalance(b => b - investment);
     const entryPrice = pricesRef.current[selectedAsset.symbol] || selectedAsset.basePrice;
-
     setActiveTrades(prev => [{
-      id: Math.random().toString(36).substring(2, 9),
+      id: Math.random().toString(36).slice(2, 9),
       assetSymbol: selectedAsset.symbol,
-      direction, amount: investment, entryPrice, duration,
-      secondsRemaining: duration, payout: selectedAsset.payout,
+      direction, amount: investment, entryPrice,
+      duration, secondsRemaining: duration,
+      payout: selectedAsset.payout,
       timestamp: new Date().toLocaleTimeString()
     }, ...prev]);
   };
 
+  const filteredAssets = ASSETS.filter(a =>
+    a.name.toLowerCase().includes(assetSearch.toLowerCase()) ||
+    a.symbol.toLowerCase().includes(assetSearch.toLowerCase())
+  );
+
   const currentPrice = prices[selectedAsset.symbol] || selectedAsset.basePrice;
   const currentDirection = priceDirections[selectedAsset.symbol] || 'up';
-  
   const isJpy = selectedAsset.name.includes('JPY');
   const isCryptoOrGold = selectedAsset.symbol.includes('BINANCE') || selectedAsset.symbol.includes('XAU');
-  
   const displayPrice = isCryptoOrGold
     ? currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : isJpy
-    ? currentPrice.toFixed(3)
-    : currentPrice.toFixed(5);
+    : isJpy ? currentPrice.toFixed(3) : currentPrice.toFixed(5);
 
   return (
     <div className="flex flex-col h-screen bg-[#080c11] text-white font-sans overflow-hidden select-none">
@@ -263,34 +277,61 @@ export default function TerminalPage() {
             <span>EXPIRYCAPITAL</span>
           </div>
 
-          <div className="relative">
+          {/* Asset Dropdown with Search + Click Outside */}
+          <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setAssetDropdownOpen(!assetDropdownOpen)}
               className="flex items-center space-x-2 bg-[#161c24] hover:bg-[#1f2733] border border-gray-800 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
             >
               <span>{selectedAsset.name}</span>
               <span className="text-[#b6ff3b] font-mono">+{Math.round(selectedAsset.payout * 100)}%</span>
-              <ChevronDown size={14} className="text-gray-400" />
+              <ChevronDown size={14} className={`text-gray-400 transition-transform ${assetDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {assetDropdownOpen && (
-              <div className="absolute top-full left-0 mt-2 w-72 max-h-80 overflow-y-auto bg-[#11161d] border border-gray-800 rounded-xl shadow-2xl z-50 p-2 space-y-1">
-                <div className="text-[10px] font-bold text-gray-500 uppercase px-2 py-1 sticky top-0 bg-[#11161d]">Select Assets (21 Forex + Crypto)</div>
-                {ASSETS.map(asset => (
-                  <button
-                    key={asset.symbol}
-                    onClick={() => { setSelectedAsset(asset); setAssetDropdownOpen(false); }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                      selectedAsset.symbol === asset.symbol ? 'bg-[#1e2732] text-white font-bold' : 'hover:bg-[#161c24] text-gray-300'
-                    }`}
-                  >
-                    <div className="flex flex-col items-start">
-                      <span className="font-bold">{asset.name}</span>
-                      <span className="text-[10px] text-gray-500">{asset.symbol}</span>
-                    </div>
-                    <span className="text-[#b6ff3b] font-mono font-bold">+{Math.round(asset.payout * 100)}%</span>
-                  </button>
-                ))}
+              <div className="absolute top-full left-0 mt-2 w-80 max-h-96 bg-[#11161d] border border-gray-800 rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden">
+                {/* Search box */}
+                <div className="p-2 border-b border-gray-800 sticky top-0 bg-[#11161d]">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <input
+                      autoFocus
+                      type="text"
+                      value={assetSearch}
+                      onChange={e => setAssetSearch(e.target.value)}
+                      placeholder="Search pair..."
+                      className="w-full bg-[#0b1017] border border-gray-700 rounded-lg py-2 pl-8 pr-3 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#b6ff3b]"
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-y-auto p-2 space-y-0.5 max-h-72">
+                  {filteredAssets.length === 0 ? (
+                    <div className="text-center text-gray-500 text-xs py-4">No pairs found</div>
+                  ) : (
+                    filteredAssets.map(asset => (
+                      <button
+                        key={asset.symbol}
+                        onClick={() => {
+                          setSelectedAsset(asset);
+                          setAssetDropdownOpen(false);
+                          setAssetSearch('');
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                          selectedAsset.symbol === asset.symbol
+                            ? 'bg-[#1e2732] text-white font-bold'
+                            : 'hover:bg-[#161c24] text-gray-300'
+                        }`}
+                      >
+                        <div className="flex flex-col items-start">
+                          <span className="font-bold">{asset.name}</span>
+                          <span className="text-[10px] text-gray-500">{asset.symbol}</span>
+                        </div>
+                        <span className="text-[#b6ff3b] font-mono font-bold">+{Math.round(asset.payout * 100)}%</span>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -301,12 +342,10 @@ export default function TerminalPage() {
             <button onClick={() => setIsDemo(true)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${isDemo ? 'bg-[#1a222d] text-white' : 'text-gray-400'}`}>DEMO</button>
             <button onClick={() => setIsDemo(false)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${!isDemo ? 'bg-[#1a222d] text-white' : 'text-gray-400'}`}>REAL</button>
           </div>
-
           <div className="flex flex-col items-end">
             <span className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">{isDemo ? 'Demo Balance' : 'Real Balance'}</span>
             <span className="text-lg font-mono font-black text-[#b6ff3b]">${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
-
           <button onClick={() => setBalance(10000)} className="p-2 bg-[#161c24] hover:bg-[#1f2733] border border-gray-800 rounded-lg text-xs text-gray-300 font-bold flex items-center space-x-1" title="Reset Balance">
             <Clock size={14} /><span>RESET</span>
           </button>
@@ -321,13 +360,11 @@ export default function TerminalPage() {
 
         <div className="relative flex-1 bg-[#080c11] z-0">
           <TradingViewChart key={selectedAsset.symbol} symbol={selectedAsset.symbol} />
-
           <div className="absolute top-4 left-4 z-20 bg-[#0b1017]/90 border border-gray-800 rounded-lg px-3 py-1.5 flex items-center space-x-2 shadow-xl backdrop-blur">
             <Clock size={14} className="text-[#b6ff3b]" />
             <span className="text-xs font-mono font-bold text-gray-300">CANDLE CLOSE:</span>
             <span className="text-xs font-mono font-bold text-[#b6ff3b]">00:{candleSecondsLeft.toString().padStart(2, '0')}</span>
           </div>
-
           {notification && (
             <div className={`absolute top-4 right-4 z-50 px-4 py-2.5 rounded-xl font-bold text-sm shadow-2xl flex items-center space-x-2 animate-bounce ${
               notification.type === 'win' ? 'bg-[#10b981] text-black' : notification.type === 'loss' ? 'bg-[#ef4444] text-white' : 'bg-blue-600 text-white'
