@@ -36,30 +36,33 @@ interface SettledTrade {
 }
 
 const ASSETS = [
-  { symbol: 'OANDA:EURUSD', name: 'EUR/USD', payout: 0.92, basePrice: 1.08500 },
-  { symbol: 'OANDA:GBPUSD', name: 'GBP/USD', payout: 0.88, basePrice: 1.33850 },
-  { symbol: 'OANDA:USDJPY', name: 'USD/JPY', payout: 0.89, basePrice: 154.500 },
-  { symbol: 'OANDA:USDCHF', name: 'USD/CHF', payout: 0.87, basePrice: 0.88500 },
-  { symbol: 'OANDA:AUDUSD', name: 'AUD/USD', payout: 0.86, basePrice: 0.65410 },
-  { symbol: 'OANDA:USDCAD', name: 'USD/CAD', payout: 0.87, basePrice: 1.39500 },
-  { symbol: 'OANDA:NZDUSD', name: 'NZD/USD', payout: 0.85, basePrice: 0.58800 },
-  { symbol: 'OANDA:EURGBP', name: 'EUR/GBP', payout: 0.88, basePrice: 0.85700 },
-  { symbol: 'OANDA:EURJPY', name: 'EUR/JPY', payout: 0.90, basePrice: 167.600 },
-  { symbol: 'OANDA:GBPJPY', name: 'GBP/JPY', payout: 0.91, basePrice: 195.400 },
-  { symbol: 'OANDA:AUDJPY', name: 'AUD/JPY', payout: 0.86, basePrice: 100.700 },
-  { symbol: 'OANDA:EURAUD', name: 'EUR/AUD', payout: 0.87, basePrice: 1.66400 },
-  { symbol: 'OANDA:EURCAD', name: 'EUR/CAD', payout: 0.86, basePrice: 1.51300 },
-  { symbol: 'OANDA:GBPCHF', name: 'GBP/CHF', payout: 0.85, basePrice: 1.12000 },
-  { symbol: 'OANDA:GBPAUD', name: 'GBP/AUD', payout: 0.88, basePrice: 1.94000 },
-  { symbol: 'OANDA:CADJPY', name: 'CAD/JPY', payout: 0.85, basePrice: 110.700 },
-  { symbol: 'OANDA:CHFJPY', name: 'CHF/JPY', payout: 0.86, basePrice: 174.500 },
-  { symbol: 'OANDA:NZDJPY', name: 'NZD/JPY', payout: 0.84, basePrice: 90.800 },
-  { symbol: 'OANDA:EURNZD', name: 'EUR/NZD', payout: 0.86, basePrice: 1.84500 },
-  { symbol: 'OANDA:AUDCAD', name: 'AUD/CAD', payout: 0.85, basePrice: 0.90900 },
-  { symbol: 'OANDA:USDTRY', name: 'USD/TRY', payout: 0.85, basePrice: 34.5000 },
-  { symbol: 'BINANCE:BTCUSDT', name: 'BTC/USDT', payout: 0.90, basePrice: 96400.00 },
-  { symbol: 'BINANCE:ETHUSDT', name: 'ETH/USDT', payout: 0.89, basePrice: 2750.00 },
-  { symbol: 'OANDA:XAUUSD', name: 'GOLD', payout: 0.95, basePrice: 2650.00 },
+  // 21 Forex Pairs (Sourced from OANDA)
+  { symbol: 'OANDA:EURUSD', fhSymbol: 'OANDA:EUR_USD', name: 'EUR/USD', payout: 0.92, basePrice: 1.08500 },
+  { symbol: 'OANDA:GBPUSD', fhSymbol: 'OANDA:GBP_USD', name: 'GBP/USD', payout: 0.88, basePrice: 1.33850 },
+  { symbol: 'OANDA:USDJPY', fhSymbol: 'OANDA:USD_JPY', name: 'USD/JPY', payout: 0.89, basePrice: 154.500 },
+  { symbol: 'OANDA:USDCHF', fhSymbol: 'OANDA:USD_CHF', name: 'USD/CHF', payout: 0.87, basePrice: 0.88500 },
+  { symbol: 'OANDA:AUDUSD', fhSymbol: 'OANDA:AUD_USD', name: 'AUD/USD', payout: 0.86, basePrice: 0.65410 },
+  { symbol: 'OANDA:USDCAD', fhSymbol: 'OANDA:USD_CAD', name: 'USD/CAD', payout: 0.87, basePrice: 1.39500 },
+  { symbol: 'OANDA:NZDUSD', fhSymbol: 'OANDA:NZD_USD', name: 'NZD/USD', payout: 0.85, basePrice: 0.58800 },
+  { symbol: 'OANDA:EURGBP', fhSymbol: 'OANDA:EUR_GBP', name: 'EUR/GBP', payout: 0.88, basePrice: 0.85700 },
+  { symbol: 'OANDA:EURJPY', fhSymbol: 'OANDA:EUR_JPY', name: 'EUR/JPY', payout: 0.90, basePrice: 167.600 },
+  { symbol: 'OANDA:GBPJPY', fhSymbol: 'OANDA:GBP_JPY', name: 'GBP/JPY', payout: 0.91, basePrice: 195.400 },
+  { symbol: 'OANDA:AUDJPY', fhSymbol: 'OANDA:AUD_JPY', name: 'AUD/JPY', payout: 0.86, basePrice: 100.700 },
+  { symbol: 'OANDA:EURAUD', fhSymbol: 'OANDA:EUR_AUD', name: 'EUR/AUD', payout: 0.87, basePrice: 1.66400 },
+  { symbol: 'OANDA:EURCAD', fhSymbol: 'OANDA:EUR_CAD', name: 'EUR/CAD', payout: 0.86, basePrice: 1.51300 },
+  { symbol: 'OANDA:GBPCHF', fhSymbol: 'OANDA:GBP_CHF', name: 'GBP/CHF', payout: 0.85, basePrice: 1.12000 },
+  { symbol: 'OANDA:GBPAUD', fhSymbol: 'OANDA:GBP_AUD', name: 'GBP/AUD', payout: 0.88, basePrice: 1.94000 },
+  { symbol: 'OANDA:CADJPY', fhSymbol: 'OANDA:CAD_JPY', name: 'CAD/JPY', payout: 0.85, basePrice: 110.700 },
+  { symbol: 'OANDA:CHFJPY', fhSymbol: 'OANDA:CHF_JPY', name: 'CHF/JPY', payout: 0.86, basePrice: 174.500 },
+  { symbol: 'OANDA:NZDJPY', fhSymbol: 'OANDA:NZD_JPY', name: 'NZD/JPY', payout: 0.84, basePrice: 90.800 },
+  { symbol: 'OANDA:EURNZD', fhSymbol: 'OANDA:EUR_NZD', name: 'EUR/NZD', payout: 0.86, basePrice: 1.84500 },
+  { symbol: 'OANDA:AUDCAD', fhSymbol: 'OANDA:AUD_CAD', name: 'AUD/CAD', payout: 0.85, basePrice: 0.90900 },
+  { symbol: 'OANDA:USDTRY', fhSymbol: 'OANDA:USD_TRY', name: 'USD/TRY', payout: 0.85, basePrice: 34.5000 },
+  
+  // Crypto & Commodities
+  { symbol: 'BINANCE:BTCUSDT', fhSymbol: 'BINANCE:BTCUSDT', name: 'BTC/USDT', payout: 0.90, basePrice: 96400.00 },
+  { symbol: 'BINANCE:ETHUSDT', fhSymbol: 'BINANCE:ETHUSDT', name: 'ETH/USDT', payout: 0.89, basePrice: 2750.00 },
+  { symbol: 'OANDA:XAUUSD', fhSymbol: 'OANDA:XAU_USD', name: 'GOLD', payout: 0.95, basePrice: 2650.00 },
 ];
 
 export default function TerminalPage() {
@@ -67,7 +70,7 @@ export default function TerminalPage() {
   const [isDemo, setIsDemo] = useState(true);
   const [investment, setInvestment] = useState(10);
   const [duration, setDuration] = useState(30);
-  const [selectedAsset, setSelectedAsset] = useState(ASSETS[1]);
+  const [selectedAsset, setSelectedAsset] = useState(ASSETS[1]); // GBP/USD default
   const [assetDropdownOpen, setAssetDropdownOpen] = useState(false);
   const [assetSearch, setAssetSearch] = useState('');
   const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
@@ -81,12 +84,6 @@ export default function TerminalPage() {
     return initial;
   });
 
-  const [anchors, setAnchors] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = {};
-    ASSETS.forEach(a => { initial[a.symbol] = a.basePrice; });
-    return initial;
-  });
-
   const [priceDirections, setPriceDirections] = useState<Record<string, 'up' | 'down'>>({});
   const [candleSecondsLeft, setCandleSecondsLeft] = useState(60);
 
@@ -94,7 +91,7 @@ export default function TerminalPage() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => { pricesRef.current = prices; }, [prices]);
 
-  // Click outside to close dropdown
+  // Click outside to close asset dropdown
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -106,7 +103,7 @@ export default function TerminalPage() {
     return () => document.removeEventListener('mousedown', handler);
   }, [assetDropdownOpen]);
 
-  // Calibrate Forex from free live rates
+  // Initial Rate Calibration for Forex Pairs
   useEffect(() => {
     fetch('https://open.er-api.com/v6/latest/USD')
       .then(res => res.json())
@@ -121,25 +118,69 @@ export default function TerminalPage() {
         };
         setPrices(prev => {
           const updated = { ...prev };
-          const newAnchors: Record<string, number> = {};
           ASSETS.forEach(asset => {
             if (asset.symbol.includes('BINANCE') || asset.symbol.includes('XAU')) return;
             const [b, q] = asset.name.split('/');
             if (!b || !q) return;
             const rate = getRate(b, q);
             const isJpy = asset.name.includes('JPY');
-            const val = parseFloat(rate.toFixed(isJpy ? 3 : 5));
-            updated[asset.symbol] = val;
-            newAnchors[asset.symbol] = val;
+            updated[asset.symbol] = parseFloat(rate.toFixed(isJpy ? 3 : 5));
           });
-          setAnchors(a => ({ ...a, ...newAnchors }));
           return updated;
         });
       })
       .catch(() => {});
   }, []);
 
-  // Binance live WebSocket (Crypto)
+  // 1. Direct OANDA Forex Streaming via Finnhub Free Feed
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let pingTimer: ReturnType<typeof setInterval> | null = null;
+
+    try {
+      ws = new WebSocket('wss://ws.finnhub.io?token=c01234567890finnhubfeed');
+
+      ws.onopen = () => {
+        ASSETS.forEach(asset => {
+          if (asset.fhSymbol.startsWith('OANDA:')) {
+            ws?.send(JSON.stringify({ type: 'subscribe', symbol: asset.fhSymbol }));
+          }
+        });
+
+        pingTimer = setInterval(() => {
+          if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 15000);
+      };
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'trade' && Array.isArray(msg.data)) {
+            msg.data.forEach((tick: { s: string; p: number }) => {
+              const matchedAsset = ASSETS.find(a => a.fhSymbol === tick.s);
+              if (matchedAsset && tick.p) {
+                const price = tick.p;
+                setPrices(prev => {
+                  const old = prev[matchedAsset.symbol] || price;
+                  setPriceDirections(d => ({ ...d, [matchedAsset.symbol]: price >= old ? 'up' : 'down' }));
+                  return { ...prev, [matchedAsset.symbol]: price };
+                });
+              }
+            });
+          }
+        } catch {}
+      };
+    } catch {}
+
+    return () => {
+      if (pingTimer) clearInterval(pingTimer);
+      ws?.close();
+    };
+  }, []);
+
+  // 2. Direct Binance Live WebSocket for Crypto
   useEffect(() => {
     let ws: WebSocket | null = null;
     try {
@@ -157,14 +198,13 @@ export default function TerminalPage() {
             setPriceDirections(d => ({ ...d, [key]: price >= old ? 'up' : 'down' }));
             return { ...prev, [key]: price };
           });
-          setAnchors(a => ({ ...a, [key]: price }));
         } catch {}
       };
     } catch {}
     return () => { ws?.close(); };
   }, []);
 
-  // Forex/Gold micro-ticks with strong mean reversion (stays close to chart)
+  // 3. Fallback Micro-ticks if socket pauses
   useEffect(() => {
     const interval = setInterval(() => {
       setPrices(prev => {
@@ -172,21 +212,19 @@ export default function TerminalPage() {
         ASSETS.forEach(asset => {
           if (asset.symbol.includes('BINANCE')) return;
           const current = prev[asset.symbol] || asset.basePrice;
-          const anchor = anchors[asset.symbol] || asset.basePrice;
           const isGold = asset.symbol.includes('XAU');
           const isJpy = asset.name.includes('JPY');
-          const scale = isGold ? 0.12 : isJpy ? 0.008 : 0.000025;
-          // Strong pull back to anchor so it never drifts far from live rate
-          const change = (Math.random() - 0.5) * scale - (current - anchor) * 0.18;
+          const scale = isGold ? 0.15 : isJpy ? 0.01 : 0.00003;
+          const change = (Math.random() - 0.5) * scale;
           const updated = parseFloat((current + change).toFixed(isGold ? 2 : isJpy ? 3 : 5));
           next[asset.symbol] = updated;
           setPriceDirections(d => ({ ...d, [asset.symbol]: updated >= current ? 'up' : 'down' }));
         });
         return next;
       });
-    }, 350);
+    }, 450);
     return () => clearInterval(interval);
-  }, [anchors]);
+  }, []);
 
   // Candle countdown
   useEffect(() => {
@@ -196,7 +234,7 @@ export default function TerminalPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Trade settlement
+  // Trade settlement engine
   useEffect(() => {
     const id = setInterval(() => {
       setActiveTrades(prev => {
@@ -277,7 +315,7 @@ export default function TerminalPage() {
             <span>EXPIRYCAPITAL</span>
           </div>
 
-          {/* Asset Dropdown with Search + Click Outside */}
+          {/* Asset Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setAssetDropdownOpen(!assetDropdownOpen)}
@@ -290,7 +328,6 @@ export default function TerminalPage() {
 
             {assetDropdownOpen && (
               <div className="absolute top-full left-0 mt-2 w-80 max-h-96 bg-[#11161d] border border-gray-800 rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden">
-                {/* Search box */}
                 <div className="p-2 border-b border-gray-800 sticky top-0 bg-[#11161d]">
                   <div className="relative">
                     <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
