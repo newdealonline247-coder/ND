@@ -71,9 +71,17 @@ export default function TerminalPage() {
   const [tradeTab, setTradeTab] = useState<'active' | 'closed'>('active');
   const [serverTime, setServerTime] = useState(new Date());
 
+  // Fixed position coordinates for popovers to prevent overflow clipping
+  const [timePopoverPos, setTimePopoverPos] = useState({ top: 200, right: 336 });
+  const [amountPopoverPos, setAmountPopoverPos] = useState({ top: 300, right: 336 });
+
   const dropdownRef = useRef<HTMLDivElement>(null);
   const expiryRef = useRef<HTMLDivElement>(null);
   const amountRef = useRef<HTMLDivElement>(null);
+  const timeBtnRef = useRef<HTMLButtonElement>(null);
+  const amountBtnRef = useRef<HTMLButtonElement>(null);
+  const timePopoverRef = useRef<HTMLDivElement>(null);
+  const amountPopoverRef = useRef<HTMLDivElement>(null);
   const priceRef = useRef<number | null>(null);
 
   useEffect(() => { priceRef.current = price; }, [price]);
@@ -85,9 +93,20 @@ export default function TerminalPage() {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsAssetOpen(false);
-      if (expiryRef.current && !expiryRef.current.contains(event.target as Node)) setIsExpiryOpen(false);
-      if (amountRef.current && !amountRef.current.contains(event.target as Node)) setIsAmountOpen(false);
+      const target = event.target as Node;
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) setIsAssetOpen(false);
+      if (
+        expiryRef.current && !expiryRef.current.contains(target) &&
+        timePopoverRef.current && !timePopoverRef.current.contains(target)
+      ) {
+        setIsExpiryOpen(false);
+      }
+      if (
+        amountRef.current && !amountRef.current.contains(target) &&
+        amountPopoverRef.current && !amountPopoverRef.current.contains(target)
+      ) {
+        setIsAmountOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -377,69 +396,34 @@ export default function TerminalPage() {
             <div className="space-y-4 shrink-0 relative" ref={expiryRef}>
               <label className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest block">Time</label>
               <button
-                onClick={() => { setIsExpiryOpen(!isExpiryOpen); setIsAmountOpen(false); }}
+                ref={timeBtnRef}
+                onClick={() => {
+                  if (timeBtnRef.current) {
+                    const rect = timeBtnRef.current.getBoundingClientRect();
+                    setTimePopoverPos({ top: rect.top, right: window.innerWidth - rect.left + 12 });
+                  }
+                  setIsExpiryOpen(!isExpiryOpen);
+                  setIsAmountOpen(false);
+                }}
                 className={`w-full flex items-center justify-between bg-[#0a1114] border ${isExpiryOpen ? 'border-[#b6ff3b]' : 'border-[#24323a] hover:border-[#b6ff3b]/40'} rounded-xl p-3 transition-colors`}
               >
                 <span className="font-mono font-bold text-white text-lg tracking-widest">{formatTimeStr(expirySec)}</span>
                 <Clock size={16} className="text-[#5c6a72]" />
               </button>
-
-              {/* ── Time Popover (only section modified) ── */}
-              {isExpiryOpen && (
-                <div className="absolute right-[calc(100%+16px)] top-0 w-[300px] bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-2xl z-50">
-                  {/* HH : MM : SS steppers */}
-                  <div className="flex items-center justify-center gap-1 mb-4 bg-[#05080a] rounded-xl border border-[#182228] p-3">
-                    {/* Hours */}
-                    <div className="flex flex-col items-center gap-1">
-                      <button onClick={() => updateExpiry('h', 1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={14} /></button>
-                      <span className="font-mono font-bold text-xl text-white w-11 text-center py-1">{Math.floor(expirySec / 3600).toString().padStart(2, '0')}</span>
-                      <button onClick={() => updateExpiry('h', -1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Minus size={14} /></button>
-                    </div>
-                    <span className="font-mono font-bold text-xl text-[#5c6a72] mb-1">:</span>
-                    {/* Minutes */}
-                    <div className="flex flex-col items-center gap-1">
-                      <button onClick={() => updateExpiry('m', 1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={14} /></button>
-                      <span className="font-mono font-bold text-xl text-[#b6ff3b] w-11 text-center py-1">{Math.floor((expirySec % 3600) / 60).toString().padStart(2, '0')}</span>
-                      <button onClick={() => updateExpiry('m', -1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Minus size={14} /></button>
-                    </div>
-                    <span className="font-mono font-bold text-xl text-[#5c6a72] mb-1">:</span>
-                    {/* Seconds */}
-                    <div className="flex flex-col items-center gap-1">
-                      <button onClick={() => updateExpiry('s', 1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={14} /></button>
-                      <span className="font-mono font-bold text-xl text-white w-11 text-center py-1">{(expirySec % 60).toString().padStart(2, '0')}</span>
-                      <button onClick={() => updateExpiry('s', -1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Minus size={14} /></button>
-                    </div>
-                  </div>
-
-                  {/* Quick duration chips */}
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[
-                      { l: 'S5', v: 5 }, { l: 'S15', v: 15 }, { l: 'S30', v: 30 },
-                      { l: 'M1', v: 60 }, { l: 'M3', v: 180 }, { l: 'M5', v: 300 },
-                      { l: 'M15', v: 900 }, { l: 'M30', v: 1800 }, { l: 'H1', v: 3600 },
-                      { l: 'H4', v: 14400 },
-                    ].map(t => (
-                      <button
-                        key={t.l}
-                        onClick={() => { setExpirySec(t.v); setIsExpiryOpen(false); }}
-                        className={`py-2 text-xs font-bold rounded-lg border transition-all ${
-                          expirySec === t.v
-                            ? 'bg-[#b6ff3b] text-[#0a0f04] border-[#b6ff3b]'
-                            : 'bg-[#05080a] text-[#8e9ca5] border-[#182228] hover:bg-[#182228] hover:text-white'
-                        }`}
-                      >
-                        {t.l}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="space-y-4 shrink-0 relative" ref={amountRef}>
               <label className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest block">Amount</label>
               <button
-                onClick={() => { setIsAmountOpen(!isAmountOpen); setIsExpiryOpen(false); }}
+                ref={amountBtnRef}
+                onClick={() => {
+                  if (amountBtnRef.current) {
+                    const rect = amountBtnRef.current.getBoundingClientRect();
+                    setAmountPopoverPos({ top: rect.top, right: window.innerWidth - rect.left + 12 });
+                  }
+                  setIsAmountOpen(!isAmountOpen);
+                  setIsExpiryOpen(false);
+                }}
                 className={`w-full flex items-center justify-between bg-[#0a1114] border ${isAmountOpen ? 'border-[#b6ff3b]' : 'border-[#24323a] hover:border-[#b6ff3b]/40'} rounded-xl p-3 transition-colors`}
               >
                 <div className="flex items-center gap-2">
@@ -447,63 +431,6 @@ export default function TerminalPage() {
                   <span className="font-mono font-bold text-white text-lg">{amount}</span>
                 </div>
               </button>
-
-              {/* ── Amount Popover (only section modified) ── */}
-              {isAmountOpen && (
-                <div className="absolute right-[calc(100%+16px)] top-0 w-[260px] bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-2xl z-50">
-                  {/* Value display + multipliers */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="flex-1 bg-[#05080a] border border-[#182228] rounded-xl px-3 py-2.5 flex items-center gap-1">
-                      <span className="text-[#5c6a72] font-bold text-sm">$</span>
-                      <span className="text-white font-mono font-bold text-lg tracking-tight">{amount}</span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <button
-                        onClick={() => setAmount(String(Math.min(balance, (parseFloat(amount) || 0) * 2)))}
-                        className="w-9 h-6 bg-[#182228] hover:bg-[#24323a] rounded-md flex items-center justify-center text-[10px] font-bold text-[#ecf4ee] transition-colors"
-                      >×2</button>
-                      <button
-                        onClick={() => setAmount(String(Math.max(1, Math.floor((parseFloat(amount) || 0) / 2))))}
-                        className="w-9 h-6 bg-[#182228] hover:bg-[#24323a] rounded-md flex items-center justify-center text-[10px] font-bold text-[#ecf4ee] transition-colors"
-                      >÷2</button>
-                    </div>
-                  </div>
-
-                  {/* Numpad */}
-                  <div className="grid grid-cols-3 gap-1.5 mb-3">
-                    {['7','8','9','4','5','6','1','2','3','.','0','back'].map(k => (
-                      <button
-                        key={k}
-                        onClick={() => handleNumpad(k)}
-                        className={`h-11 rounded-xl flex items-center justify-center text-sm font-bold transition-colors border ${
-                          k === 'back'
-                            ? 'bg-[#182228]/60 border-[#182228] text-[#ff4d67] hover:bg-[#ff4d67]/15'
-                            : 'bg-[#05080a] border-[#182228] text-[#ecf4ee] hover:bg-[#182228] hover:border-[#24323a]'
-                        }`}
-                      >
-                        {k === 'back' ? <Delete size={16} /> : k}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Quick stake chips */}
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[1, 5, 10, 25, 50, 100, 500, 1000].map(v => (
-                      <button
-                        key={v}
-                        onClick={() => { setAmount(String(v)); setIsAmountOpen(false); }}
-                        className={`py-1.5 text-[11px] font-mono font-bold rounded-lg border transition-all ${
-                          amount === String(v)
-                            ? 'bg-[#b6ff3b]/15 text-[#b6ff3b] border-[#b6ff3b]/40'
-                            : 'bg-[#05080a] text-[#8e9ca5] border-[#182228] hover:text-white hover:bg-[#182228]'
-                        }`}
-                      >
-                        ${v}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="bg-[#0a1114] rounded-2xl p-4 border border-[#24323a] shrink-0">
@@ -537,6 +464,123 @@ export default function TerminalPage() {
           </div>
         </div>
       </main>
+
+      {/* ── Fixed Position Popovers (Outside scroll box to avoid overflow clipping) ── */}
+
+      {/* Time Popover */}
+      {isExpiryOpen && (
+        <div
+          ref={timePopoverRef}
+          style={{ top: `${timePopoverPos.top}px`, right: `${timePopoverPos.right}px` }}
+          className="fixed w-[290px] bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-2xl z-[9999] animate-in fade-in zoom-in-95 duration-150"
+        >
+          {/* HH : MM : SS Digital Spinners */}
+          <div className="flex items-center justify-center gap-1 mb-3.5 bg-[#05080a] rounded-xl border border-[#182228] p-3">
+            {/* Hours */}
+            <div className="flex flex-col items-center gap-1">
+              <button onClick={() => updateExpiry('h', 1)} className="w-10 h-7 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={13} /></button>
+              <span className="font-mono font-bold text-lg text-white w-10 text-center py-0.5">{Math.floor(expirySec / 3600).toString().padStart(2, '0')}</span>
+              <button onClick={() => updateExpiry('h', -1)} className="w-10 h-7 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Minus size={13} /></button>
+            </div>
+            <span className="font-mono font-bold text-lg text-[#5c6a72] mb-0.5">:</span>
+            {/* Minutes */}
+            <div className="flex flex-col items-center gap-1">
+              <button onClick={() => updateExpiry('m', 1)} className="w-10 h-7 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={13} /></button>
+              <span className="font-mono font-bold text-lg text-[#b6ff3b] w-10 text-center py-0.5">{Math.floor((expirySec % 3600) / 60).toString().padStart(2, '0')}</span>
+              <button onClick={() => updateExpiry('m', -1)} className="w-10 h-7 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Minus size={13} /></button>
+            </div>
+            <span className="font-mono font-bold text-lg text-[#5c6a72] mb-0.5">:</span>
+            {/* Seconds */}
+            <div className="flex flex-col items-center gap-1">
+              <button onClick={() => updateExpiry('s', 15)} className="w-10 h-7 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={13} /></button>
+              <span className="font-mono font-bold text-lg text-white w-10 text-center py-0.5">{(expirySec % 60).toString().padStart(2, '0')}</span>
+              <button onClick={() => updateExpiry('s', -15)} className="w-10 h-7 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Minus size={13} /></button>
+            </div>
+          </div>
+
+          {/* Quick preset chips */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {[
+              { l: 'S15', v: 15 }, { l: 'S30', v: 30 }, { l: 'M1', v: 60 },
+              { l: 'M2', v: 120 }, { l: 'M3', v: 180 }, { l: 'M5', v: 300 },
+              { l: 'M15', v: 900 }, { l: 'M30', v: 1800 }, { l: 'H1', v: 3600 },
+            ].map(t => (
+              <button
+                key={t.l}
+                onClick={() => { setExpirySec(t.v); setIsExpiryOpen(false); }}
+                className={`py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                  expirySec === t.v
+                    ? 'bg-[#b6ff3b] text-[#0a0f04] border-[#b6ff3b]'
+                    : 'bg-[#05080a] text-[#8e9ca5] border-[#182228] hover:bg-[#182228] hover:text-white'
+                }`}
+              >
+                {t.l}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Amount Popover */}
+      {isAmountOpen && (
+        <div
+          ref={amountPopoverRef}
+          style={{ top: `${amountPopoverPos.top}px`, right: `${amountPopoverPos.right}px` }}
+          className="fixed w-[260px] bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-2xl z-[9999] animate-in fade-in zoom-in-95 duration-150"
+        >
+          {/* Display & multipliers */}
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex-1 bg-[#05080a] border border-[#182228] rounded-xl px-3 py-2 flex items-center gap-1">
+              <span className="text-[#5c6a72] font-bold text-sm">$</span>
+              <span className="text-white font-mono font-bold text-base tracking-tight">{amount}</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <button
+                onClick={() => setAmount(String(Math.min(balance, (parseFloat(amount) || 0) * 2)))}
+                className="w-8 h-5 bg-[#182228] hover:bg-[#24323a] rounded-md flex items-center justify-center text-[10px] font-bold text-[#ecf4ee] transition-colors"
+              >x2</button>
+              <button
+                onClick={() => setAmount(String(Math.max(1, Math.floor((parseFloat(amount) || 0) / 2))))}
+                className="w-8 h-5 bg-[#182228] hover:bg-[#24323a] rounded-md flex items-center justify-center text-[10px] font-bold text-[#ecf4ee] transition-colors"
+              >/2</button>
+            </div>
+          </div>
+
+          {/* Numpad */}
+          <div className="grid grid-cols-3 gap-1.5 mb-3">
+            {['7','8','9','4','5','6','1','2','3','.','0','back'].map(k => (
+              <button
+                key={k}
+                onClick={() => handleNumpad(k)}
+                className={`h-10 rounded-lg flex items-center justify-center text-sm font-bold transition-colors border ${
+                  k === 'back'
+                    ? 'bg-[#182228]/60 border-[#182228] text-[#ff4d67] hover:bg-[#ff4d67]/15'
+                    : 'bg-[#05080a] border-[#182228] text-[#ecf4ee] hover:bg-[#182228] hover:border-[#24323a]'
+                }`}
+              >
+                {k === 'back' ? <Delete size={15} /> : k}
+              </button>
+            ))}
+          </div>
+
+          {/* Quick stake chips */}
+          <div className="grid grid-cols-4 gap-1.5">
+            {[1, 5, 10, 25, 50, 100, 500, 1000].map(v => (
+              <button
+                key={v}
+                onClick={() => { setAmount(String(v)); setIsAmountOpen(false); }}
+                className={`py-1 text-[11px] font-mono font-bold rounded-lg border transition-all ${
+                  amount === String(v)
+                    ? 'bg-[#b6ff3b]/15 text-[#b6ff3b] border-[#b6ff3b]/40'
+                    : 'bg-[#05080a] text-[#8e9ca5] border-[#182228] hover:text-white hover:bg-[#182228]'
+                }`}
+              >
+                ${v}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
