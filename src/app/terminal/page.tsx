@@ -1,475 +1,296 @@
-﻿'use client';
+﻿"use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import dynamic from 'next/dynamic';
-import { Activity, TrendingUp, TrendingDown, Clock, History, BarChart2, CheckCircle2, XCircle, ChevronDown, Search } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { 
+  TrendingUp, TrendingDown, Clock, ChevronDown, 
+  Search, User, Settings, BarChart2, HelpCircle, CheckCircle2, XCircle, RefreshCw
+} from 'lucide-react';
+import TradingViewChart from '@/components/TradingViewChart';
 
-const TradingViewChart = dynamic(
-  () => import('@/components/terminal/TradingViewChart'),
-  { ssr: false }
-);
+interface Asset {
+  id: string;
+  name: string;
+  type: string;
+  symbol: string;
+  payout: number;
+}
 
 interface ActiveTrade {
   id: string;
-  assetSymbol: string;
-  direction: 'HIGHER' | 'LOWER';
-  amount: number;
+  assetId: string;
+  assetName: string;
+  type: 'HIGHER' | 'LOWER';
   entryPrice: number;
-  duration: number;
-  secondsRemaining: number;
-  payout: number;
-  timestamp: string;
+  amount: number;
+  payoutRate: number;
+  durationSec: number;
+  timeRemaining: number;
+  createdAt: number;
 }
 
-interface SettledTrade {
+interface TradeResult {
   id: string;
-  assetSymbol: string;
-  direction: 'HIGHER' | 'LOWER';
+  assetName: string;
+  type: 'HIGHER' | 'LOWER';
   amount: number;
-  entryPrice: number;
-  exitPrice: number;
-  payoutAmount: number;
-  isWin: boolean;
-  isTie: boolean;
-  asset: string;
-  timestamp: string;
+  payout: number;
+  win: boolean;
+  tie: boolean;
 }
 
-const ASSETS = [
-  // 21 Forex Pairs (Sourced from OANDA)
-  { symbol: 'OANDA:EURUSD', fhSymbol: 'OANDA:EUR_USD', name: 'EUR/USD', payout: 0.92, basePrice: 1.08500 },
-  { symbol: 'OANDA:GBPUSD', fhSymbol: 'OANDA:GBP_USD', name: 'GBP/USD', payout: 0.88, basePrice: 1.33850 },
-  { symbol: 'OANDA:USDJPY', fhSymbol: 'OANDA:USD_JPY', name: 'USD/JPY', payout: 0.89, basePrice: 154.500 },
-  { symbol: 'OANDA:USDCHF', fhSymbol: 'OANDA:USD_CHF', name: 'USD/CHF', payout: 0.87, basePrice: 0.88500 },
-  { symbol: 'OANDA:AUDUSD', fhSymbol: 'OANDA:AUD_USD', name: 'AUD/USD', payout: 0.86, basePrice: 0.65410 },
-  { symbol: 'OANDA:USDCAD', fhSymbol: 'OANDA:USD_CAD', name: 'USD/CAD', payout: 0.87, basePrice: 1.39500 },
-  { symbol: 'OANDA:NZDUSD', fhSymbol: 'OANDA:NZD_USD', name: 'NZD/USD', payout: 0.85, basePrice: 0.58800 },
-  { symbol: 'OANDA:EURGBP', fhSymbol: 'OANDA:EUR_GBP', name: 'EUR/GBP', payout: 0.88, basePrice: 0.85700 },
-  { symbol: 'OANDA:EURJPY', fhSymbol: 'OANDA:EUR_JPY', name: 'EUR/JPY', payout: 0.90, basePrice: 167.600 },
-  { symbol: 'OANDA:GBPJPY', fhSymbol: 'OANDA:GBP_JPY', name: 'GBP/JPY', payout: 0.91, basePrice: 195.400 },
-  { symbol: 'OANDA:AUDJPY', fhSymbol: 'OANDA:AUD_JPY', name: 'AUD/JPY', payout: 0.86, basePrice: 100.700 },
-  { symbol: 'OANDA:EURAUD', fhSymbol: 'OANDA:EUR_AUD', name: 'EUR/AUD', payout: 0.87, basePrice: 1.66400 },
-  { symbol: 'OANDA:EURCAD', fhSymbol: 'OANDA:EUR_CAD', name: 'EUR/CAD', payout: 0.86, basePrice: 1.51300 },
-  { symbol: 'OANDA:GBPCHF', fhSymbol: 'OANDA:GBP_CHF', name: 'GBP/CHF', payout: 0.85, basePrice: 1.12000 },
-  { symbol: 'OANDA:GBPAUD', fhSymbol: 'OANDA:GBP_AUD', name: 'GBP/AUD', payout: 0.88, basePrice: 1.94000 },
-  { symbol: 'OANDA:CADJPY', fhSymbol: 'OANDA:CAD_JPY', name: 'CAD/JPY', payout: 0.85, basePrice: 110.700 },
-  { symbol: 'OANDA:CHFJPY', fhSymbol: 'OANDA:CHF_JPY', name: 'CHF/JPY', payout: 0.86, basePrice: 174.500 },
-  { symbol: 'OANDA:NZDJPY', fhSymbol: 'OANDA:NZD_JPY', name: 'NZD/JPY', payout: 0.84, basePrice: 90.800 },
-  { symbol: 'OANDA:EURNZD', fhSymbol: 'OANDA:EUR_NZD', name: 'EUR/NZD', payout: 0.86, basePrice: 1.84500 },
-  { symbol: 'OANDA:AUDCAD', fhSymbol: 'OANDA:AUD_CAD', name: 'AUD/CAD', payout: 0.85, basePrice: 0.90900 },
-  { symbol: 'OANDA:USDTRY', fhSymbol: 'OANDA:USD_TRY', name: 'USD/TRY', payout: 0.85, basePrice: 34.5000 },
-  
-  // Crypto & Commodities
-  { symbol: 'BINANCE:BTCUSDT', fhSymbol: 'BINANCE:BTCUSDT', name: 'BTC/USDT', payout: 0.90, basePrice: 96400.00 },
-  { symbol: 'BINANCE:ETHUSDT', fhSymbol: 'BINANCE:ETHUSDT', name: 'ETH/USDT', payout: 0.89, basePrice: 2750.00 },
-  { symbol: 'OANDA:XAUUSD', fhSymbol: 'OANDA:XAU_USD', name: 'GOLD', payout: 0.95, basePrice: 2650.00 },
+const ASSETS: Asset[] = [
+  { id: 'EURUSD', name: 'EUR/USD', type: 'Forex', symbol: 'OANDA:EURUSD', payout: 92 },
+  { id: 'GBPUSD', name: 'GBP/USD', type: 'Forex', symbol: 'OANDA:GBPUSD', payout: 88 },
+  { id: 'GBPAUD', name: 'GBP/AUD', type: 'Forex', symbol: 'OANDA:GBPAUD', payout: 88 },
+  { id: 'USDJPY', name: 'USD/JPY', type: 'Forex', symbol: 'OANDA:USDJPY', payout: 90 },
+  { id: 'USDCHF', name: 'USD/CHF', type: 'Forex', symbol: 'OANDA:USDCHF', payout: 85 },
+  { id: 'AUDUSD', name: 'AUD/USD', type: 'Forex', symbol: 'OANDA:AUDUSD', payout: 87 },
+  { id: 'USDCAD', name: 'USD/CAD', type: 'Forex', symbol: 'OANDA:USDCAD', payout: 86 },
+  { id: 'NZDUSD', name: 'NZD/USD', type: 'Forex', symbol: 'OANDA:NZDUSD', payout: 84 },
+  { id: 'EURGBP', name: 'EUR/GBP', type: 'Forex', symbol: 'OANDA:EURGBP', payout: 89 },
+  { id: 'EURJPY', name: 'EUR/JPY', type: 'Forex', symbol: 'OANDA:EURJPY', payout: 91 },
+  { id: 'GBPJPY', name: 'GBP/JPY', type: 'Forex', symbol: 'OANDA:GBPJPY', payout: 90 },
+  { id: 'AUDJPY', name: 'AUD/JPY', type: 'Forex', symbol: 'OANDA:AUDJPY', payout: 85 },
+  { id: 'EURAUD', name: 'EUR/AUD', type: 'Forex', symbol: 'OANDA:EURAUD', payout: 88 },
+  { id: 'EURCAD', name: 'EUR/CAD', type: 'Forex', symbol: 'OANDA:EURCAD', payout: 86 },
+  { id: 'GBPCHF', name: 'GBP/CHF', type: 'Forex', symbol: 'OANDA:GBPCHF', payout: 84 },
+  { id: 'CADJPY', name: 'CAD/JPY', type: 'Forex', symbol: 'OANDA:CADJPY', payout: 87 },
+  { id: 'CHFJPY', name: 'CHF/JPY', type: 'Forex', symbol: 'OANDA:CHFJPY', payout: 86 },
+  { id: 'NZDJPY', name: 'NZD/JPY', type: 'Forex', symbol: 'OANDA:NZDJPY', payout: 83 },
+  { id: 'EURNZD', name: 'EUR/NZD', type: 'Forex', symbol: 'OANDA:EURNZD', payout: 85 },
+  { id: 'AUDCAD', name: 'AUD/CAD', type: 'Forex', symbol: 'OANDA:AUDCAD', payout: 84 },
+  { id: 'USDTRY', name: 'USD/TRY', type: 'Forex', symbol: 'OANDA:USDTRY', payout: 80 },
+  { id: 'BTCUSDT', name: 'BTC/USDT', type: 'Crypto', symbol: 'BINANCE:BTCUSDT', payout: 95 },
+  { id: 'ETHUSDT', name: 'ETH/USDT', type: 'Crypto', symbol: 'BINANCE:ETHUSDT', payout: 93 },
+  { id: 'XAUUSD', name: 'GOLD', type: 'Commodity', symbol: 'OANDA:XAUUSD', payout: 90 },
 ];
 
+const FINNHUB_KEY = 'cqslcrpr01qj9a43lb7gcqslcrpr01qj9a43lb80';
+
 export default function TerminalPage() {
-  const [balance, setBalance] = useState(10000);
-  const [isDemo, setIsDemo] = useState(true);
-  const [investment, setInvestment] = useState(10);
-  const [duration, setDuration] = useState(30);
-  const [selectedAsset, setSelectedAsset] = useState(ASSETS[1]); // GBP/USD default
-  const [assetDropdownOpen, setAssetDropdownOpen] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState<Asset>(ASSETS[0]);
+  const [isAssetOpen, setIsAssetOpen] = useState(false);
   const [assetSearch, setAssetSearch] = useState('');
+  const [price, setPrice] = useState<number | null>(null);
+  const [prevPrice, setPrevPrice] = useState<number | null>(null);
+  const [amount, setAmount] = useState('10');
+  const [expiry, setExpiry] = useState('30s');
+  const [balance, setBalance] = useState<number>(10000);
   const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
-  const [tradeHistory, setTradeHistory] = useState<SettledTrade[]>([]);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [notification, setNotification] = useState<{ message: string; type: 'win' | 'loss' | 'info' } | null>(null);
-
-  const [prices, setPrices] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = {};
-    ASSETS.forEach(a => { initial[a.symbol] = a.basePrice; });
-    return initial;
-  });
-
-  const [priceDirections, setPriceDirections] = useState<Record<string, 'up' | 'down'>>({});
-  const [candleSecondsLeft, setCandleSecondsLeft] = useState(60);
-
-  const pricesRef = useRef(prices);
+  const [tradeResults, setTradeResults] = useState<TradeResult[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { pricesRef.current = prices; }, [prices]);
+  const priceRef = useRef<number | null>(null);
 
-  // Click outside to close asset dropdown
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setAssetDropdownOpen(false);
-        setAssetSearch('');
-      }
-    };
-    if (assetDropdownOpen) document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [assetDropdownOpen]);
+    priceRef.current = price;
+  }, [price]);
 
-  // Initial Rate Calibration for Forex Pairs
-  useEffect(() => {
-    fetch('https://open.er-api.com/v6/latest/USD')
-      .then(res => res.json())
-      .then(data => {
-        if (!data?.rates) return;
-        const r = data.rates;
-        const getRate = (base: string, quote: string) => {
-          if (base === 'USD') return r[quote] || 1;
-          if (quote === 'USD') return r[base] ? 1 / r[base] : 1;
-          if (r[base] && r[quote]) return r[quote] / r[base];
-          return 1;
-        };
-        setPrices(prev => {
-          const updated = { ...prev };
-          ASSETS.forEach(asset => {
-            if (asset.symbol.includes('BINANCE') || asset.symbol.includes('XAU')) return;
-            const [b, q] = asset.name.split('/');
-            if (!b || !q) return;
-            const rate = getRate(b, q);
-            const isJpy = asset.name.includes('JPY');
-            updated[asset.symbol] = parseFloat(rate.toFixed(isJpy ? 3 : 5));
-          });
-          return updated;
-        });
-      })
-      .catch(() => {});
-  }, []);
-
-  // 1. Direct OANDA Forex Streaming via Finnhub Free Feed
-  useEffect(() => {
-    let ws: WebSocket | null = null;
-    let pingTimer: ReturnType<typeof setInterval> | null = null;
-
-    try {
-      ws = new WebSocket('wss://ws.finnhub.io?token=c01234567890finnhubfeed');
-
-      ws.onopen = () => {
-        ASSETS.forEach(asset => {
-          if (asset.fhSymbol.startsWith('OANDA:')) {
-            ws?.send(JSON.stringify({ type: 'subscribe', symbol: asset.fhSymbol }));
-          }
-        });
-
-        pingTimer = setInterval(() => {
-          if (ws?.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'ping' }));
-          }
-        }, 15000);
-      };
-
-      ws.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data);
-          if (msg.type === 'trade' && Array.isArray(msg.data)) {
-            msg.data.forEach((tick: { s: string; p: number }) => {
-              const matchedAsset = ASSETS.find(a => a.fhSymbol === tick.s);
-              if (matchedAsset && tick.p) {
-                const price = tick.p;
-                setPrices(prev => {
-                  const old = prev[matchedAsset.symbol] || price;
-                  setPriceDirections(d => ({ ...d, [matchedAsset.symbol]: price >= old ? 'up' : 'down' }));
-                  return { ...prev, [matchedAsset.symbol]: price };
-                });
-              }
-            });
-          }
-        } catch {}
-      };
-    } catch {}
-
-    return () => {
-      if (pingTimer) clearInterval(pingTimer);
-      ws?.close();
-    };
-  }, []);
-
-  // 2. Direct Binance Live WebSocket for Crypto
-  useEffect(() => {
-    let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@ticker/ethusdt@ticker');
-      ws.onmessage = (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (!data?.s || !data?.c) return;
-          const price = parseFloat(data.c);
-          if (isNaN(price)) return;
-          const key = data.s === 'BTCUSDT' ? 'BINANCE:BTCUSDT' : data.s === 'ETHUSDT' ? 'BINANCE:ETHUSDT' : null;
-          if (!key) return;
-          setPrices(prev => {
-            const old = prev[key] || price;
-            setPriceDirections(d => ({ ...d, [key]: price >= old ? 'up' : 'down' }));
-            return { ...prev, [key]: price };
-          });
-        } catch {}
-      };
-    } catch {}
-    return () => { ws?.close(); };
-  }, []);
-
-  // 3. Fallback Micro-ticks if socket pauses
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPrices(prev => {
-        const next = { ...prev };
-        ASSETS.forEach(asset => {
-          if (asset.symbol.includes('BINANCE')) return;
-          const current = prev[asset.symbol] || asset.basePrice;
-          const isGold = asset.symbol.includes('XAU');
-          const isJpy = asset.name.includes('JPY');
-          const scale = isGold ? 0.15 : isJpy ? 0.01 : 0.00003;
-          const change = (Math.random() - 0.5) * scale;
-          const updated = parseFloat((current + change).toFixed(isGold ? 2 : isJpy ? 3 : 5));
-          next[asset.symbol] = updated;
-          setPriceDirections(d => ({ ...d, [asset.symbol]: updated >= current ? 'up' : 'down' }));
-        });
-        return next;
-      });
-    }, 450);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Candle countdown
-  useEffect(() => {
-    const tick = () => setCandleSecondsLeft(60 - (Math.floor(Date.now() / 1000) % 60));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Trade settlement engine
-  useEffect(() => {
-    const id = setInterval(() => {
-      setActiveTrades(prev => {
-        const keep: ActiveTrade[] = [];
-        prev.forEach(trade => {
-          const left = trade.secondsRemaining - 1;
-          if (left <= 0) {
-            const exit = pricesRef.current[trade.assetSymbol] ?? trade.entryPrice;
-            let isWin = false, isTie = false;
-            if (trade.direction === 'HIGHER') {
-              if (exit > trade.entryPrice) isWin = true;
-              else if (exit === trade.entryPrice) isTie = true;
-            } else {
-              if (exit < trade.entryPrice) isWin = true;
-              else if (exit === trade.entryPrice) isTie = true;
-            }
-            let payoutAmount = 0;
-            if (isWin) payoutAmount = trade.amount * (1 + trade.payout);
-            else if (isTie) payoutAmount = trade.amount;
-            if (payoutAmount > 0) setBalance(b => b + payoutAmount);
-
-            setTradeHistory(h => [{
-              id: trade.id, assetSymbol: trade.assetSymbol, direction: trade.direction,
-              amount: trade.amount, entryPrice: trade.entryPrice, exitPrice: exit,
-              payoutAmount, isWin, isTie,
-              asset: trade.assetSymbol.split(':')[1] || trade.assetSymbol,
-              timestamp: new Date().toLocaleTimeString()
-            }, ...h]);
-
-            setNotification({
-              message: isWin ? `WIN! +$${payoutAmount.toFixed(2)}` : isTie ? `TIE (Refunded $${trade.amount})` : `LOSS -$${trade.amount}`,
-              type: isWin ? 'win' : isTie ? 'info' : 'loss'
-            });
-            setTimeout(() => setNotification(null), 4000);
-          } else {
-            keep.push({ ...trade, secondsRemaining: left });
-          }
-        });
-        return keep;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const handleTrade = (direction: 'HIGHER' | 'LOWER') => {
-    if (investment <= 0 || isNaN(investment) || balance < investment) return;
-    setBalance(b => b - investment);
-    const entryPrice = pricesRef.current[selectedAsset.symbol] || selectedAsset.basePrice;
-    setActiveTrades(prev => [{
-      id: Math.random().toString(36).slice(2, 9),
-      assetSymbol: selectedAsset.symbol,
-      direction, amount: investment, entryPrice,
-      duration, secondsRemaining: duration,
-      payout: selectedAsset.payout,
-      timestamp: new Date().toLocaleTimeString()
-    }, ...prev]);
-  };
-
-  const filteredAssets = ASSETS.filter(a =>
-    a.name.toLowerCase().includes(assetSearch.toLowerCase()) ||
-    a.symbol.toLowerCase().includes(assetSearch.toLowerCase())
+  const filteredAssets = useMemo(() => 
+    ASSETS.filter(a => a.name.toLowerCase().includes(assetSearch.toLowerCase()) || a.type.toLowerCase().includes(assetSearch.toLowerCase())),
+    [assetSearch]
   );
 
-  const currentPrice = prices[selectedAsset.symbol] || selectedAsset.basePrice;
-  const currentDirection = priceDirections[selectedAsset.symbol] || 'up';
-  const isJpy = selectedAsset.name.includes('JPY');
-  const isCryptoOrGold = selectedAsset.symbol.includes('BINANCE') || selectedAsset.symbol.includes('XAU');
-  const displayPrice = isCryptoOrGold
-    ? currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : isJpy ? currentPrice.toFixed(3) : currentPrice.toFixed(5);
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsAssetOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    setPrice(null);
+    let ws: WebSocket | null = null;
+    const fetchInitialPrice = async () => {
+      try {
+        const sym = selectedAsset.symbol;
+        const restSym = sym.includes('OANDA') ? sym.replace(/([A-Z]{3})([A-Z]{3})/, '$1_$2') : sym.split(':')[1];
+        const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${restSym}&token=${FINNHUB_KEY}`);
+        const data = await res.json();
+        if (data.c) setPrice(data.c);
+      } catch (e) { console.error("Initial fetch failed", e); }
+    };
+    fetchInitialPrice();
+    if (selectedAsset.type === 'Crypto') {
+      ws = new WebSocket(`wss://stream.binance.com:9443/ws/${selectedAsset.id.toLowerCase()}@ticker`);
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        setPrice(prev => {
+          if (prev !== null) setPrevPrice(prev);
+          return parseFloat(data.c);
+        });
+      };
+    } else {
+      ws = new WebSocket(`wss://ws.finnhub.io?token=${FINNHUB_KEY}`);
+      ws.onopen = () => {
+        const sym = selectedAsset.symbol;
+        const subSym = sym.includes('OANDA') ? sym.replace(/([A-Z]{3})([A-Z]{3})/, '$1_$2') : sym;
+        ws?.send(JSON.stringify({ type: 'subscribe', symbol: subSym }));
+      };
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.type === 'trade') {
+          setPrice(prev => {
+            if (prev !== null) setPrevPrice(prev);
+            return data.data[0].p;
+          });
+        }
+      };
+    }
+    return () => ws?.close();
+  }, [selectedAsset]);
+
+  useEffect(() => {
+    if (activeTrades.length === 0) return;
+    const interval = setInterval(() => {
+      setActiveTrades(prevTrades => {
+        const currentPriceVal = priceRef.current;
+        const remainingTrades: ActiveTrade[] = [];
+        prevTrades.forEach(trade => {
+          const nextTime = trade.timeRemaining - 1;
+          if (nextTime <= 0) {
+            const curP = currentPriceVal || trade.entryPrice;
+            const isWin = trade.type === 'HIGHER' ? curP > trade.entryPrice : curP < trade.entryPrice;
+            const payoutAmount = isWin ? trade.amount * (1 + trade.payoutRate) : (curP === trade.entryPrice ? trade.amount : 0);
+            if (payoutAmount > 0) setBalance(b => b + payoutAmount);
+            setTradeResults(r => [{ id: trade.id, assetName: trade.assetName, type: trade.type, amount: trade.amount, payout: payoutAmount, win: isWin, tie: curP === trade.entryPrice }, ...r].slice(0, 3));
+          } else {
+            remainingTrades.push({ ...trade, timeRemaining: nextTime });
+          }
+        });
+        return remainingTrades;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeTrades.length]);
+
+  const handlePlaceTrade = (type: 'HIGHER' | 'LOWER') => {
+    const tradeAmount = parseFloat(amount);
+    if (!price || tradeAmount > balance) return;
+    setBalance(prev => prev - tradeAmount);
+    const dur = expiry.endsWith('s') ? parseInt(expiry) : parseInt(expiry) * 60;
+    setActiveTrades(prev => [...prev, {
+      id: Math.random().toString(36).substr(2, 9),
+      assetId: selectedAsset.id, assetName: selectedAsset.name, type,
+      entryPrice: price, amount: tradeAmount, payoutRate: selectedAsset.payout / 100,
+      durationSec: dur, timeRemaining: dur, createdAt: Date.now()
+    }]);
+  };
+
+  const formatPrice = (p: number | null, assetId: string = selectedAsset.id, assetType: string = selectedAsset.type) => {
+    if (p === null) return "Loading...";
+    const isJPY = assetId.includes('JPY');
+    const isCrypto = assetType === 'Crypto' || assetId === 'XAUUSD';
+    return p.toLocaleString(undefined, { minimumFractionDigits: isJPY ? 3 : (isCrypto ? 2 : 5), maximumFractionDigits: isJPY ? 3 : (isCrypto ? 2 : 5) });
+  };
 
   return (
-    <div className="flex flex-col h-screen bg-[#080c11] text-white font-sans overflow-hidden select-none">
-      <header className="h-14 border-b border-gray-800/80 bg-[#0b1017] px-4 flex items-center justify-between z-30">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2 font-black text-lg tracking-wider text-white">
-            <span className="bg-[#b6ff3b] text-black px-2 py-0.5 rounded font-black">X</span>
-            <span>EXPIRYCAPITAL</span>
+    <div className="flex flex-col h-screen bg-[#0b0e11] text-gray-200 overflow-hidden font-sans">
+      <header className="h-14 border-b border-gray-800/50 bg-[#0b0e11] flex items-center justify-between px-4 z-50 gap-4">
+        <div className="flex items-center gap-4 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-emerald-500 rounded flex items-center justify-center"><span className="text-black font-bold text-xl">X</span></div>
+            <span className="font-bold text-lg tracking-tight text-white uppercase hidden md:inline">ExpiryCapital</span>
           </div>
-
-          {/* Asset Dropdown */}
           <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setAssetDropdownOpen(!assetDropdownOpen)}
-              className="flex items-center space-x-2 bg-[#161c24] hover:bg-[#1f2733] border border-gray-800 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-            >
-              <span>{selectedAsset.name}</span>
-              <span className="text-[#b6ff3b] font-mono">+{Math.round(selectedAsset.payout * 100)}%</span>
-              <ChevronDown size={14} className={`text-gray-400 transition-transform ${assetDropdownOpen ? 'rotate-180' : ''}`} />
+            <button onClick={() => setIsAssetOpen(!isAssetOpen)} className="flex items-center gap-3 px-3 py-1.5 bg-gray-800/40 hover:bg-gray-800/60 rounded border border-gray-700/50 transition-all">
+              <span className="font-bold text-sm tracking-wide">{selectedAsset.name} <span className="text-emerald-400 ml-1">+{selectedAsset.payout}%</span></span>
+              <ChevronDown size={14} className={`transition-transform ${isAssetOpen ? 'rotate-180' : ''}`} />
             </button>
-
-            {assetDropdownOpen && (
-              <div className="absolute top-full left-0 mt-2 w-80 max-h-96 bg-[#11161d] border border-gray-800 rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden">
-                <div className="p-2 border-b border-gray-800 sticky top-0 bg-[#11161d]">
+            {isAssetOpen && (
+              <div className="absolute top-full left-0 mt-2 w-72 bg-[#161a1e] border border-gray-800 rounded-lg shadow-2xl z-[100] overflow-hidden">
+                <div className="p-3 border-b border-gray-800">
                   <div className="relative">
-                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
-                    <input
-                      autoFocus
-                      type="text"
-                      value={assetSearch}
-                      onChange={e => setAssetSearch(e.target.value)}
-                      placeholder="Search pair..."
-                      className="w-full bg-[#0b1017] border border-gray-700 rounded-lg py-2 pl-8 pr-3 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#b6ff3b]"
-                    />
+                    <Search className="absolute left-2 top-2.5 text-gray-500" size={14} />
+                    <input autoFocus placeholder="Search pairs..." className="w-full bg-gray-900 border border-gray-700 rounded py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:border-emerald-500" value={assetSearch} onChange={(e) => setAssetSearch(e.target.value)} />
                   </div>
                 </div>
-
-                <div className="overflow-y-auto p-2 space-y-0.5 max-h-72">
-                  {filteredAssets.length === 0 ? (
-                    <div className="text-center text-gray-500 text-xs py-4">No pairs found</div>
-                  ) : (
-                    filteredAssets.map(asset => (
-                      <button
-                        key={asset.symbol}
-                        onClick={() => {
-                          setSelectedAsset(asset);
-                          setAssetDropdownOpen(false);
-                          setAssetSearch('');
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                          selectedAsset.symbol === asset.symbol
-                            ? 'bg-[#1e2732] text-white font-bold'
-                            : 'hover:bg-[#161c24] text-gray-300'
-                        }`}
-                      >
-                        <div className="flex flex-col items-start">
-                          <span className="font-bold">{asset.name}</span>
-                          <span className="text-[10px] text-gray-500">{asset.symbol}</span>
-                        </div>
-                        <span className="text-[#b6ff3b] font-mono font-bold">+{Math.round(asset.payout * 100)}%</span>
-                      </button>
-                    ))
-                  )}
+                <div className="max-h-[400px] overflow-y-auto">
+                  {filteredAssets.map(asset => (
+                    <button key={asset.id} onClick={() => { setSelectedAsset(asset); setIsAssetOpen(false); }} className="w-full px-4 py-2.5 hover:bg-gray-800 flex items-center justify-between text-sm transition-colors border-b border-gray-800/30">
+                      <div className="flex flex-col items-start"><span className="font-medium text-gray-200">{asset.name}</span><span className="text-[10px] text-gray-500 uppercase tracking-wider">{asset.type}</span></div>
+                      <span className="text-emerald-400 font-bold">+{asset.payout}%</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <div className="bg-[#11161d] p-1 rounded-xl flex items-center border border-gray-800">
-            <button onClick={() => setIsDemo(true)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${isDemo ? 'bg-[#1a222d] text-white' : 'text-gray-400'}`}>DEMO</button>
-            <button onClick={() => setIsDemo(false)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${!isDemo ? 'bg-[#1a222d] text-white' : 'text-gray-400'}`}>REAL</button>
+        {/* MIDDLE ACTIVE TRADES FEED */}
+        <div className="flex-1 flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-2 border-x border-gray-800/40 min-w-0">
+          {activeTrades.length === 0 && tradeResults.length === 0 && <div className="text-xs text-gray-600 font-medium italic">No active trades. Click BUY or SELL to open a position.</div>}
+          {activeTrades.map(trade => {
+            const isWinning = trade.type === 'HIGHER' ? (priceRef.current || 0) > trade.entryPrice : (priceRef.current || 0) < trade.entryPrice;
+            return (
+              <div key={trade.id} className={`flex items-center gap-2.5 px-3 py-1 rounded border transition-all shrink-0 ${isWinning ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300' : 'bg-rose-950/40 border-rose-500/60 text-rose-300'}`}>
+                <div className="flex items-center gap-1">{trade.type === 'HIGHER' ? <TrendingUp size={14} className="text-emerald-400" /> : <TrendingDown size={14} className="text-rose-400" />}<span className="font-bold text-xs">{trade.assetName}</span></div>
+                <div className="h-4 w-[1px] bg-gray-800"></div>
+                <div className="flex flex-col text-[11px] leading-tight font-mono"><span className="text-gray-400 font-sans font-bold">${trade.amount}</span><span className="font-bold text-white">{Math.floor(trade.timeRemaining/60)}:{(trade.timeRemaining%60).toString().padStart(2,'0')}</span></div>
+                <div className="h-4 w-[1px] bg-gray-800"></div>
+                <div className="flex flex-col text-right font-mono text-[11px] leading-tight"><span className="text-[10px] text-gray-500">Return</span><span className={`font-bold ${isWinning ? 'text-emerald-400' : 'text-gray-500'}`}>{isWinning ? `+$${(trade.amount*(1+trade.payoutRate)).toFixed(2)}` : '$0.00'}</span></div>
+              </div>
+            );
+          })}
+          {tradeResults.map(res => (
+            <div key={res.id} className={`flex items-center gap-2 px-2.5 py-1 rounded border text-xs shrink-0 ${res.win ? 'bg-emerald-900/20 border-emerald-500/40 text-emerald-400' : 'bg-rose-900/20 border-rose-500/40 text-rose-400'}`}>
+              {res.win ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+              <span className="font-bold text-[11px]">{res.assetName}</span>
+              <span className="font-mono text-[11px] font-bold">{res.win ? `+$${res.payout.toFixed(2)}` : `-$${res.amount.toFixed(2)}`}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex bg-gray-900 rounded p-1 border border-gray-800">
+            <button className="px-3 py-1 text-xs font-bold rounded bg-gray-800 text-white">DEMO</button>
+            <button className="px-3 py-1 text-xs font-bold rounded text-gray-500">REAL</button>
           </div>
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">{isDemo ? 'Demo Balance' : 'Real Balance'}</span>
-            <span className="text-lg font-mono font-black text-[#b6ff3b]">${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <div className="text-right">
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Demo Balance</div>
+            <div className="text-emerald-400 font-mono font-bold text-base leading-tight">${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </div>
-          <button onClick={() => setBalance(10000)} className="p-2 bg-[#161c24] hover:bg-[#1f2733] border border-gray-800 rounded-lg text-xs text-gray-300 font-bold flex items-center space-x-1" title="Reset Balance">
-            <Clock size={14} /><span>RESET</span>
-          </button>
+          <button onClick={resetBalance} className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors flex items-center gap-1 text-xs"><RefreshCw size={14} /><span className="text-[10px] font-bold">RESET</span></button>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden relative">
-        <div className="w-12 bg-[#0b1017] border-r border-gray-800/80 flex flex-col items-center py-4 space-y-6 text-gray-500 z-10">
-          <button className="hover:text-white transition-colors"><BarChart2 size={18} /></button>
-          <button onClick={() => setHistoryOpen(!historyOpen)} className={`hover:text-white transition-colors ${historyOpen ? 'text-[#b6ff3b]' : ''}`}><History size={18} /></button>
+      <main className="flex-1 flex overflow-hidden">
+        <div className="w-12 border-r border-gray-800/50 bg-[#0b0e11] flex flex-col items-center py-4 gap-6">
+          <button className="p-2 text-emerald-500 bg-emerald-500/10 rounded-lg"><BarChart2 size={20} /></button>
+          <button className="p-2 text-gray-500 hover:text-white"><Clock size={20} /></button>
+          <button className="p-2 text-gray-500 hover:text-white"><User size={20} /></button>
+          <div className="mt-auto flex flex-col gap-6"><button className="p-2 text-gray-500 hover:text-white"><Settings size={20} /></button><button className="p-2 text-gray-500 hover:text-white"><HelpCircle size={20} /></button></div>
         </div>
-
-        <div className="relative flex-1 bg-[#080c11] z-0">
-          <TradingViewChart key={selectedAsset.symbol} symbol={selectedAsset.symbol} />
-          <div className="absolute top-4 left-4 z-20 bg-[#0b1017]/90 border border-gray-800 rounded-lg px-3 py-1.5 flex items-center space-x-2 shadow-xl backdrop-blur">
-            <Clock size={14} className="text-[#b6ff3b]" />
-            <span className="text-xs font-mono font-bold text-gray-300">CANDLE CLOSE:</span>
-            <span className="text-xs font-mono font-bold text-[#b6ff3b]">00:{candleSecondsLeft.toString().padStart(2, '0')}</span>
+        <div className="flex-1 relative bg-[#0b0e11]"><TradingViewChart symbol={selectedAsset.symbol} /></div>
+        <div className="w-72 border-l border-gray-800/50 bg-[#0b0e11] p-4 flex flex-col gap-6">
+          <div className="bg-gray-900/40 border border-gray-800/50 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2"><span className="text-[11px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>Live Price</span></div>
+            <div className={`text-2xl font-mono font-bold tracking-tighter ${!price || !prevPrice || price === prevPrice ? 'text-emerald-400' : (price > prevPrice ? 'text-emerald-400' : 'text-rose-400')}`}>{formatPrice(price)}</div>
           </div>
-          {notification && (
-            <div className={`absolute top-4 right-4 z-50 px-4 py-2.5 rounded-xl font-bold text-sm shadow-2xl flex items-center space-x-2 animate-bounce ${
-              notification.type === 'win' ? 'bg-[#10b981] text-black' : notification.type === 'loss' ? 'bg-[#ef4444] text-white' : 'bg-blue-600 text-white'
-            }`}>
-              {notification.type === 'win' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
-              <span>{notification.message}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="w-80 bg-[#0b1017] border-l border-gray-800/80 p-4 flex flex-col justify-between z-20 shadow-2xl">
           <div className="space-y-4">
-            <div className="bg-[#161c24] border border-gray-800 rounded-xl p-3 flex items-center justify-between shadow-inner">
-              <div className="flex items-center space-x-2 text-xs font-bold text-gray-400 uppercase">
-                <Activity size={14} className="text-[#b6ff3b] animate-pulse" />
-                <span>Live Price</span>
-              </div>
-              <div className={`text-xl font-mono font-black transition-colors ${currentDirection === 'up' ? 'text-[#10b981]' : 'text-[#ef4444]'}`}>
-                {displayPrice}
-              </div>
+            <div>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2 block">Expiration Time</label>
+              <div className="grid grid-cols-4 gap-1">{['30s', '1m', '2m', '5m'].map(t => (<button key={t} onClick={() => setExpiry(t)} className={`py-2 text-xs font-bold rounded border transition-all ${expiry === t ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-gray-900 text-gray-400 border-gray-800 hover:border-gray-700'}`}>{t}</button>))}</div>
             </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Expiration Time</label>
-              <div className="grid grid-cols-4 gap-1.5 bg-[#11161d] p-1 rounded-xl border border-gray-800">
-                {[30, 60, 120, 300].map(s => (
-                  <button key={s} onClick={() => setDuration(s)}
-                    className={`py-1.5 rounded-lg text-xs font-bold font-mono transition-all ${duration === s ? 'bg-[#b6ff3b] text-black shadow-lg font-black' : 'text-gray-400 hover:text-white'}`}>
-                    {s >= 60 ? `${s / 60}m` : `${s}s`}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Investment Amount</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">$</span>
-                <input type="number" value={investment} onChange={e => setInvestment(parseFloat(e.target.value))}
-                  className="w-full bg-[#161c24] border border-gray-800 rounded-xl py-2.5 pl-7 pr-3 text-lg font-mono font-bold text-white focus:outline-none focus:border-[#b6ff3b] transition-colors" />
-              </div>
-              <div className="grid grid-cols-5 gap-1 pt-1">
-                {[5, 10, 25, 50, 100].map(amt => (
-                  <button key={amt} onClick={() => setInvestment(amt)}
-                    className="py-1 bg-[#11161d] hover:bg-[#1a222d] border border-gray-800 rounded-lg text-xs font-mono font-bold text-gray-300 transition-colors">${amt}</button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-[#11161d] border border-gray-800/60 rounded-xl p-3 text-center space-y-0.5">
-              <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Profit +{Math.round(selectedAsset.payout * 100)}%</div>
-              <div className="text-xl font-mono font-black text-[#b6ff3b]">+${(investment * selectedAsset.payout || 0).toFixed(2)}</div>
-              <div className="text-[10px] font-mono text-gray-500">Total Return: ${(investment * (1 + selectedAsset.payout) || 0).toFixed(2)}</div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2 pt-2">
-              <button onClick={() => handleTrade('HIGHER')}
-                className="w-full bg-[#10b981] hover:bg-[#059669] active:scale-[0.98] text-white py-3.5 rounded-xl font-black text-sm uppercase tracking-wider flex items-center justify-center space-x-2 shadow-lg shadow-emerald-950/40 transition-all">
-                <TrendingUp size={18} /><span>Buy / Higher</span>
-              </button>
-              <button onClick={() => handleTrade('LOWER')}
-                className="w-full bg-[#ef4444] hover:bg-[#dc2626] active:scale-[0.98] text-white py-3.5 rounded-xl font-black text-sm uppercase tracking-wider flex items-center justify-center space-x-2 shadow-lg shadow-rose-950/40 transition-all">
-                <TrendingDown size={18} /><span>Sell / Lower</span>
-              </button>
+            <div>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2 block">Investment Amount</label>
+              <div className="relative group"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold group-focus-within:text-emerald-500">$</span><input type="text" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} className="w-full bg-gray-900 border border-gray-800 rounded-lg py-3 pl-8 pr-4 text-white font-mono font-bold focus:outline-none focus:border-emerald-500 transition-colors" /></div>
+              <div className="grid grid-cols-5 gap-1 mt-2">{['5', '10', '25', '50', '100'].map(val => (<button key={val} onClick={() => setAmount(val)} className="py-1.5 text-[10px] font-bold bg-gray-900/50 hover:bg-gray-800 text-gray-400 rounded transition-colors border border-gray-800">${val}</button>))}</div>
             </div>
           </div>
+          <div className="mt-4 bg-gray-900/30 rounded-xl p-4 border border-gray-800/50">
+            <div className="flex justify-between text-[11px] mb-1"><span className="text-gray-500 font-bold uppercase tracking-wider">Profit +{selectedAsset.payout}%</span><span className="text-emerald-400 font-bold">+${((parseFloat(amount) || 0) * (selectedAsset.payout / 100)).toFixed(2)}</span></div>
+            <div className="flex justify-between text-[11px]"><span className="text-gray-500 font-bold uppercase tracking-wider">Total Return</span><span className="text-white font-bold">${((parseFloat(amount) || 0) * (1 + selectedAsset.payout / 100)).toFixed(2)}</span></div>
+          </div>
+          <div className="mt-auto space-y-3">
+            <button onClick={() => handlePlaceTrade('HIGHER')} className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/10 group cursor-pointer"><TrendingUp size={20} className="group-hover:-translate-y-0.5 transition-transform" /><span className="uppercase tracking-widest text-sm">Buy / Higher</span></button>
+            <button onClick={() => handlePlaceTrade('LOWER')} className="w-full bg-rose-500 hover:bg-rose-400 active:bg-rose-600 text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-rose-500/10 group cursor-pointer"><TrendingDown size={20} className="group-hover:translate-y-0.5 transition-transform" /><span className="uppercase tracking-widest text-sm">Sell / Lower</span></button>
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
