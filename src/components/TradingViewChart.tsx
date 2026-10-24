@@ -37,8 +37,8 @@ function TradingViewChart({ symbol }: TradingViewChartProps) {
       allow_symbol_change: false,
       calendar: false,
       support_host: 'https://www.tradingview.com',
-      backgroundColor: '#0b0e11',
-      gridColor: 'rgba(240, 243, 250, 0.06)'
+      backgroundColor: '#05080a',
+      gridColor: 'rgba(240, 243, 250, 0.04)'
     });
 
     currentContainer.appendChild(widgetDiv);
