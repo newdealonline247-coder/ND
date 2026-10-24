@@ -186,6 +186,12 @@ export default function TerminalPage() {
     return p.toLocaleString(undefined, { minimumFractionDigits: isJPY ? 3 : (isCrypto ? 2 : 5), maximumFractionDigits: isJPY ? 3 : (isCrypto ? 2 : 5) });
   };
 
+  const resetBalance = () => {
+    setBalance(10000);
+    setActiveTrades([]);
+    setTradeResults([]);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-[#0b0e11] text-gray-200 overflow-hidden font-sans">
       <header className="h-14 border-b border-gray-800/50 bg-[#0b0e11] flex items-center justify-between px-4 z-50 gap-4">
