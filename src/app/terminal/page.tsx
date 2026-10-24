@@ -155,7 +155,6 @@ export default function TerminalPage() {
       ws.onmessage = (e) => {
         const data = JSON.parse(e.data);
         if (data.E) {
-          // Re-calibrate server offset on every live tick
           serverOffsetRef.current = data.E - Date.now();
         }
         setPrice(prev => { if (prev !== null) setPrevPrice(prev); return parseFloat(data.c); });
@@ -255,6 +254,13 @@ export default function TerminalPage() {
     const isJPY = assetId.includes('JPY');
     const isCrypto = assetType === 'Crypto' || assetId === 'XAUUSD';
     return p.toLocaleString(undefined, { minimumFractionDigits: isJPY ? 3 : (isCrypto ? 2 : 5), maximumFractionDigits: isJPY ? 3 : (isCrypto ? 2 : 5) });
+  };
+
+  const formatTradePrice = (p: number, assetName: string) => {
+    const isJPY = assetName.includes('JPY');
+    const isCrypto = assetName.includes('BTC') || assetName.includes('ETH') || assetName.includes('GOLD') || assetName.includes('XAU');
+    const digits = isJPY ? 3 : (isCrypto ? 2 : 5);
+    return p.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
   };
 
   const formatTimeStr = (seconds: number) => {
@@ -394,17 +400,48 @@ export default function TerminalPage() {
             })}
             {tradeTab === 'closed' && tradeResults.length === 0 && <div className="text-center text-[#5c6a72] text-xs font-medium py-10 italic">No trade history.</div>}
             {tradeTab === 'closed' && tradeResults.map(res => (
-              <div key={res.id} className="bg-[#05080a] border border-[#24323a] rounded-xl overflow-hidden shadow-sm p-3 opacity-80 hover:opacity-100 transition-opacity">
-                <div className="flex justify-between items-center mb-2.5">
-                  <div className="flex items-center gap-1.5">
-                    {res.win ? <CheckCircle2 size={14} className="text-[#2bd98a]" /> : <XCircle size={14} className="text-[#ff4d67]" />}
-                    <span className="font-bold text-xs">{res.assetName}</span>
+              <div key={res.id} className="bg-[#05080a] border border-[#24323a] rounded-xl overflow-hidden shadow-sm p-3.5 space-y-2.5 transition-all hover:border-[#344652]">
+                {/* Header: Win/Loss status, Asset Name, Predicted Direction Badge, Time */}
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    {res.win ? <CheckCircle2 size={15} className="text-[#2bd98a] shrink-0" /> : <XCircle size={15} className="text-[#ff4d67] shrink-0" />}
+                    <span className="font-bold text-xs text-[#ecf4ee]">{res.assetName}</span>
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded ${
+                      res.type === 'HIGHER'
+                        ? 'bg-[#2bd98a]/15 text-[#2bd98a] border border-[#2bd98a]/30'
+                        : 'bg-[#ff4d67]/15 text-[#ff4d67] border border-[#ff4d67]/30'
+                    }`}>
+                      {res.type === 'HIGHER' ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                      {res.type}
+                    </span>
                   </div>
                   <span className="font-mono text-[10px] text-[#5c6a72]">{new Date(res.closeTime).toLocaleTimeString()}</span>
                 </div>
-                <div className="flex justify-between items-end mb-2">
-                  <div className="flex flex-col gap-0.5"><span className="text-[10px] text-[#5c6a72] uppercase font-bold">Invested</span><span className="font-mono font-bold text-xs text-[#8e9ca5]">${res.amount.toFixed(2)}</span></div>
-                  <div className="flex flex-col gap-0.5 text-right"><span className="text-[10px] text-[#5c6a72] uppercase font-bold">Result</span><span className={`font-mono font-bold text-xs ${res.win ? 'text-[#2bd98a]' : 'text-[#ff4d67]'}`}>{res.win ? `+$${res.payout.toFixed(2)}` : `-$${res.amount.toFixed(2)}`}</span></div>
+
+                {/* Open Price & Close Price Grid */}
+                <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-[#0a1114] border border-[#182228] font-mono text-[11px]">
+                  <div>
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#5c6a72] block font-sans">Open Price</span>
+                    <span className="text-[#ecf4ee] font-semibold">{formatTradePrice(res.entryPrice, res.assetName)}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#5c6a72] block font-sans">Close Price</span>
+                    <span className={`font-semibold ${res.win ? 'text-[#2bd98a]' : 'text-[#ff4d67]'}`}>{formatTradePrice(res.closePrice, res.assetName)}</span>
+                  </div>
+                </div>
+
+                {/* Invested Amount & Settlement Result */}
+                <div className="flex justify-between items-center text-xs font-mono pt-0.5">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] text-[#5c6a72] uppercase font-bold font-sans">Invested</span>
+                    <span className="font-bold text-[#8e9ca5]">${res.amount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex flex-col text-right">
+                    <span className="text-[9px] text-[#5c6a72] uppercase font-bold font-sans">Result</span>
+                    <span className={`font-bold ${res.win ? 'text-[#2bd98a]' : 'text-[#ff4d67]'}`}>
+                      {res.win ? `+$${res.payout.toFixed(2)}` : '$0.00'}
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -514,8 +551,6 @@ export default function TerminalPage() {
         </div>
       </main>
 
-      {/* ── Fixed Position Popovers ── */}
-
       {/* Time Popover */}
       {isExpiryOpen && (
         <div
@@ -523,23 +558,19 @@ export default function TerminalPage() {
           style={{ top: `${timePopoverPos.top}px`, right: `${timePopoverPos.right}px` }}
           className="fixed w-[290px] bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-2xl z-[9999] animate-in fade-in zoom-in-95 duration-150"
         >
-          {/* HH : MM : SS Digital Spinners */}
           <div className="flex items-center justify-center gap-1 mb-3.5 bg-[#05080a] rounded-xl border border-[#182228] p-3">
-            {/* Hours */}
             <div className="flex flex-col items-center gap-1">
               <button onClick={() => updateExpiry('h', 1)} className="w-10 h-7 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={13} /></button>
               <span className="font-mono font-bold text-lg text-white w-10 text-center py-0.5">{Math.floor(expirySec / 3600).toString().padStart(2, '0')}</span>
               <button onClick={() => updateExpiry('h', -1)} className="w-10 h-7 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Minus size={13} /></button>
             </div>
             <span className="font-mono font-bold text-lg text-[#5c6a72] mb-0.5">:</span>
-            {/* Minutes */}
             <div className="flex flex-col items-center gap-1">
               <button onClick={() => updateExpiry('m', 1)} className="w-10 h-7 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={13} /></button>
               <span className="font-mono font-bold text-lg text-[#b6ff3b] w-10 text-center py-0.5">{Math.floor((expirySec % 3600) / 60).toString().padStart(2, '0')}</span>
               <button onClick={() => updateExpiry('m', -1)} className="w-10 h-7 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Minus size={13} /></button>
             </div>
             <span className="font-mono font-bold text-lg text-[#5c6a72] mb-0.5">:</span>
-            {/* Seconds */}
             <div className="flex flex-col items-center gap-1">
               <button onClick={() => updateExpiry('s', 15)} className="w-10 h-7 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={13} /></button>
               <span className="font-mono font-bold text-lg text-white w-10 text-center py-0.5">{(expirySec % 60).toString().padStart(2, '0')}</span>
@@ -547,7 +578,6 @@ export default function TerminalPage() {
             </div>
           </div>
 
-          {/* Quick preset chips */}
           <div className="grid grid-cols-3 gap-1.5">
             {[
               { l: 'S15', v: 15 }, { l: 'S30', v: 30 }, { l: 'M1', v: 60 },
@@ -577,7 +607,6 @@ export default function TerminalPage() {
           style={{ top: `${amountPopoverPos.top}px`, right: `${amountPopoverPos.right}px` }}
           className="fixed w-[260px] bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-2xl z-[9999] animate-in fade-in zoom-in-95 duration-150"
         >
-          {/* Editable Display Box & Multipliers */}
           <div className="flex items-center gap-2 mb-3">
             <div className="flex-1 bg-[#05080a] border border-[#182228] rounded-xl px-3 py-2 flex items-center gap-1">
               <span className="text-[#5c6a72] font-bold text-sm">$</span>
@@ -602,7 +631,6 @@ export default function TerminalPage() {
             </div>
           </div>
 
-          {/* Numpad */}
           <div className="grid grid-cols-3 gap-1.5 mb-3">
             {['7','8','9','4','5','6','1','2','3','.','0','back'].map(k => (
               <button
@@ -619,7 +647,6 @@ export default function TerminalPage() {
             ))}
           </div>
 
-          {/* Quick stake chips */}
           <div className="grid grid-cols-4 gap-1.5">
             {[1, 5, 10, 25, 50, 100, 500, 1000].map(v => (
               <button
