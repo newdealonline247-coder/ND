@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   TrendingUp, TrendingDown, Clock, ChevronDown,
-  Search, User, Settings, BarChart2, HelpCircle, CheckCircle2, XCircle, RefreshCw, Plus, Minus, Delete
+  Search, User, Settings, BarChart2, HelpCircle, CheckCircle2, XCircle, RefreshCw, Plus, Minus, Delete,
+  Wallet, Shield, LogOut
 } from 'lucide-react';
 import TradingViewChart from '@/components/TradingViewChart';
 
@@ -64,17 +65,20 @@ export default function TerminalPage() {
   const [expirySec, setExpirySec] = useState(60);
   const [isExpiryOpen, setIsExpiryOpen] = useState(false);
 
+  // Persistent Balance & Trades State
   const [balance, setBalance] = useState<number>(10000);
   const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
   const [tradeResults, setTradeResults] = useState<TradeResult[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Modals & Sliders
   const [isTradesOpen, setIsTradesOpen] = useState(false);
   const [tradeTab, setTradeTab] = useState<'active' | 'closed'>('active');
-  const [serverTime, setServerTime] = useState(new Date());
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
 
-  // Offset between local PC clock and atomic exchange server time
+  const [serverTime, setServerTime] = useState(new Date());
   const serverOffsetRef = useRef<number>(0);
 
-  // Fixed position coordinates for popovers to prevent overflow clipping
   const [timePopoverPos, setTimePopoverPos] = useState({ top: 200, right: 336 });
   const [amountPopoverPos, setAmountPopoverPos] = useState({ top: 300, right: 336 });
 
@@ -85,6 +89,7 @@ export default function TerminalPage() {
   const popoverAmountInputRef = useRef<HTMLInputElement>(null);
   const timePopoverRef = useRef<HTMLDivElement>(null);
   const amountPopoverRef = useRef<HTMLDivElement>(null);
+  const accountModalRef = useRef<HTMLDivElement>(null);
   const priceRef = useRef<number | null>(null);
 
   useEffect(() => { priceRef.current = price; }, [price]);
@@ -94,7 +99,37 @@ export default function TerminalPage() {
     [assetSearch]
   );
 
-  // Initial Sync of Atomic Time from Binance Server API
+  // Initial Load from LocalStorage
+  useEffect(() => {
+    try {
+      const savedBalance = localStorage.getItem('ec_demo_balance');
+      const savedResults = localStorage.getItem('ec_trade_results');
+      if (savedBalance !== null) {
+        const parsed = parseFloat(savedBalance);
+        if (!isNaN(parsed)) setBalance(parsed);
+      }
+      if (savedResults !== null) {
+        const parsed = JSON.parse(savedResults);
+        if (Array.isArray(parsed)) setTradeResults(parsed);
+      }
+    } catch (e) {
+      console.error('Failed to load storage:', e);
+    }
+    setIsLoaded(true);
+  }, []);
+
+  // Save to LocalStorage on change
+  useEffect(() => {
+    if (!isLoaded) return;
+    try {
+      localStorage.setItem('ec_demo_balance', balance.toString());
+      localStorage.setItem('ec_trade_results', JSON.stringify(tradeResults));
+    } catch (e) {
+      console.error('Failed to save storage:', e);
+    }
+  }, [balance, tradeResults, isLoaded]);
+
+  // Sync Atomic Server Time
   useEffect(() => {
     const syncAtomicServerTime = async () => {
       try {
@@ -108,34 +143,27 @@ export default function TerminalPage() {
     syncAtomicServerTime();
   }, []);
 
-  // Global Click Outside Handler for Dropdowns & Popovers
+  // Global Click Outside Handler
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
       
-      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
-        setIsAssetOpen(false);
-      }
-
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) setIsAssetOpen(false);
       if (
         timePopoverRef.current && !timePopoverRef.current.contains(target) &&
         timeBtnRef.current && !timeBtnRef.current.contains(target)
-      ) {
-        setIsExpiryOpen(false);
-      }
-
+      ) setIsExpiryOpen(false);
       if (
         amountPopoverRef.current && !amountPopoverRef.current.contains(target) &&
         amountBoxRef.current && !amountBoxRef.current.contains(target)
-      ) {
-        setIsAmountOpen(false);
-      }
+      ) setIsAmountOpen(false);
+      if (accountModalRef.current && !accountModalRef.current.contains(target)) setIsAccountOpen(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Update header clock using atomic server time offset
+  // Update header clock
   useEffect(() => {
     const timer = setInterval(() => setServerTime(new Date(Date.now() + serverOffsetRef.current)), 1000);
     return () => clearInterval(timer);
@@ -159,9 +187,7 @@ export default function TerminalPage() {
       ws = new WebSocket(`wss://stream.binance.com:9443/ws/${selectedAsset.id.toLowerCase()}@ticker`);
       ws.onmessage = (e) => {
         const data = JSON.parse(e.data);
-        if (data.E) {
-          serverOffsetRef.current = data.E - Date.now();
-        }
+        if (data.E) serverOffsetRef.current = data.E - Date.now();
         setPrice(prev => { if (prev !== null) setPrevPrice(prev); return parseFloat(data.c); });
       };
     } else {
@@ -235,11 +261,7 @@ export default function TerminalPage() {
     }
   };
 
-  const handleAmountInputChange = (val: string) => {
-    if (/^\d*\.?\d*$/.test(val)) {
-      setAmount(val);
-    }
-  };
+  const handleAmountInputChange = (val: string) => { if (/^\d*\.?\d*$/.test(val)) setAmount(val); };
 
   const handlePlaceTrade = (type: 'HIGHER' | 'LOWER') => {
     const tradeAmount = parseFloat(amount);
@@ -252,6 +274,16 @@ export default function TerminalPage() {
     }, ...prev]);
     setIsTradesOpen(true);
     setTradeTab('active');
+  };
+
+  const handleResetAccount = () => {
+    setBalance(10000);
+    setTradeResults([]);
+    setActiveTrades([]);
+    try {
+      localStorage.removeItem('ec_demo_balance');
+      localStorage.removeItem('ec_trade_results');
+    } catch (e) {}
   };
 
   const formatPrice = (p: number | null, assetId: string = selectedAsset.id, assetType: string = selectedAsset.type) => {
@@ -278,8 +310,15 @@ export default function TerminalPage() {
 
   const numericAmount = parseFloat(amount) || 0;
 
+  // Stats calculations for User Account Modal
+  const totalTradesCount = tradeResults.length;
+  const wonTradesCount = tradeResults.filter(t => t.win).length;
+  const winRate = totalTradesCount > 0 ? ((wonTradesCount / totalTradesCount) * 100).toFixed(1) : '0.0';
+  const totalProfit = tradeResults.reduce((acc, t) => acc + (t.win ? (t.payout - t.amount) : -t.amount), 0);
+
   return (
     <div className="flex flex-col h-screen bg-[#05080a] text-[#ecf4ee] overflow-hidden font-sans select-none relative">
+      {/* ── HEADER ── */}
       <header className="h-[60px] border-b border-[#182228] bg-[#05080a] flex items-center justify-between px-5 z-50 gap-4">
         <div className="flex items-center gap-5 shrink-0">
           <a href="/" className="flex items-center gap-3">
@@ -347,26 +386,37 @@ export default function TerminalPage() {
           </div>
           <div className="text-right">
             <div className="text-[10px] text-[#5c6a72] font-bold uppercase tracking-widest">Demo Balance</div>
-            <div className="text-[#b6ff3b] font-mono font-bold text-base leading-tight">${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div suppressHydrationWarning className="text-[#b6ff3b] font-mono font-bold text-base leading-tight">
+              ${isLoaded ? balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '10,000.00'}
+            </div>
           </div>
-          <button onClick={() => {setBalance(10000); setActiveTrades([]); setTradeResults([]);}} className="p-2 hover:bg-[#0d161a] rounded-xl text-[#8e9ca5] hover:text-white border border-[#24323a] flex items-center gap-1.5 text-xs"><RefreshCw size={13} /><span className="text-[10px] font-bold hidden md:inline">RESET</span></button>
+          <button onClick={handleResetAccount} className="p-2 hover:bg-[#0d161a] rounded-xl text-[#8e9ca5] hover:text-white border border-[#24323a] flex items-center gap-1.5 text-xs"><RefreshCw size={13} /><span className="text-[10px] font-bold hidden md:inline">RESET</span></button>
         </div>
       </header>
 
+      {/* ── MAIN WORKSPACE ── */}
       <main className="flex-1 flex overflow-hidden relative">
+        
+        {/* Left Control Sidebar */}
         <div className="w-14 border-r border-[#182228] bg-[#05080a] flex flex-col items-center py-5 gap-6 z-50 relative">
           <button className="p-2.5 text-[#5c6a72] hover:text-[#b6ff3b] transition-colors"><BarChart2 size={20} /></button>
           <div className="relative">
             <button onClick={() => setIsTradesOpen(!isTradesOpen)} className={`p-2.5 rounded-xl transition-all ${isTradesOpen ? 'bg-[#b6ff3b] text-[#0a0f04] shadow-[0_0_15px_rgba(182,255,59,0.3)]' : 'text-[#5c6a72] hover:text-white'}`}><Clock size={20} /></button>
             {activeTrades.length > 0 && <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-[#b6ff3b] text-[#0a0f04] font-bold text-[9px] flex items-center justify-center rounded-full">{activeTrades.length}</span>}
           </div>
-          <button className="p-2.5 text-[#5c6a72] hover:text-white transition-colors"><User size={20} /></button>
+          
+          {/* USER ACCOUNT BUTTON */}
+          <button onClick={() => setIsAccountOpen(true)} className={`p-2.5 rounded-xl transition-all ${isAccountOpen ? 'bg-[#182228] text-white border border-[#24323a]' : 'text-[#5c6a72] hover:text-white'}`} title="User Account">
+            <User size={20} />
+          </button>
+          
           <div className="mt-auto flex flex-col gap-6">
             <button className="p-2.5 text-[#5c6a72] hover:text-white transition-colors"><Settings size={20} /></button>
             <button className="p-2.5 text-[#5c6a72] hover:text-white transition-colors"><HelpCircle size={20} /></button>
           </div>
         </div>
 
+        {/* Trade History Slide-out Sidebar */}
         <div className={`absolute left-14 top-0 bottom-0 w-80 bg-[#0a1114] border-r border-[#182228] z-40 shadow-2xl transition-transform duration-300 flex flex-col ${isTradesOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="flex items-center justify-between p-4 border-b border-[#182228]">
             <div className="flex gap-4">
@@ -454,7 +504,7 @@ export default function TerminalPage() {
           <TradingViewChart symbol={selectedAsset.symbol} />
         </div>
 
-        {/* Right Sidebar - Pinned Buttons Layout */}
+        {/* Right Trading Settings Sidebar */}
         <div className="w-80 border-l border-[#182228] bg-[#05080a] flex flex-col z-20 relative shadow-[-10px_0_20px_rgba(0,0,0,0.2)]">
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5 no-scrollbar">
 
@@ -553,7 +603,89 @@ export default function TerminalPage() {
         </div>
       </main>
 
-      {/* Time Popover */}
+      {/* ── USER ACCOUNT MODAL ── */}
+      {isAccountOpen && (
+        <div className="fixed inset-0 z-[99999] bg-[#05080a]/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div ref={accountModalRef} className="w-full max-w-[400px] bg-[#0a1114] border border-[#24323a] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-[#182228]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#b6ff3b]/10 border border-[#b6ff3b]/30 flex items-center justify-center text-[#b6ff3b]">
+                  <User size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white leading-tight">My Profile</h3>
+                  <span className="text-[10px] text-[#5c6a72] font-mono bg-[#182228] px-1.5 py-0.5 rounded">ID: DEMO-84920</span>
+                </div>
+              </div>
+              <button onClick={() => setIsAccountOpen(false)} className="text-[#5c6a72] hover:text-white transition-colors">
+                <XCircle size={20} />
+              </button>
+            </div>
+
+            {/* Balance Overview */}
+            <div className="p-5 border-b border-[#182228] bg-[#070b0e]">
+              <div className="flex justify-between items-end mb-4">
+                <div>
+                  <span className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest flex items-center gap-1.5 mb-1"><span className="live-dot size-2 rounded-full bg-[#b6ff3b]" />Demo Account</span>
+                  <div suppressHydrationWarning className="text-3xl font-mono font-bold text-[#b6ff3b] tracking-tight">
+                    ${isLoaded ? balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '10,000.00'}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button className="py-2.5 rounded-xl bg-[#b6ff3b] hover:bg-[#9de62e] text-[#0a0f04] font-bold text-xs transition-colors flex items-center justify-center gap-2">
+                  <Wallet size={14} /> Deposit
+                </button>
+                <button className="py-2.5 rounded-xl bg-[#182228] hover:bg-[#24323a] text-white font-bold text-xs transition-colors border border-[#24323a]">
+                  Withdraw
+                </button>
+              </div>
+            </div>
+
+            {/* Trading Statistics */}
+            <div className="p-5">
+              <h4 className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest mb-3">Trading Statistics</h4>
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="bg-[#05080a] border border-[#182228] rounded-xl p-3">
+                  <span className="block text-[10px] text-[#5c6a72] font-bold uppercase mb-1">Total Trades</span>
+                  <span className="font-mono font-bold text-lg text-white">{totalTradesCount}</span>
+                </div>
+                <div className="bg-[#05080a] border border-[#182228] rounded-xl p-3">
+                  <span className="block text-[10px] text-[#5c6a72] font-bold uppercase mb-1">Win Rate</span>
+                  <span className="font-mono font-bold text-lg text-[#2bd98a]">{winRate}%</span>
+                </div>
+                <div className="bg-[#05080a] border border-[#182228] rounded-xl p-3 col-span-2">
+                  <span className="block text-[10px] text-[#5c6a72] font-bold uppercase mb-1">Net P&L (Demo)</span>
+                  <span className={`font-mono font-bold text-lg ${totalProfit >= 0 ? 'text-[#b6ff3b]' : 'text-[#ff4d67]'}`}>
+                    {totalProfit >= 0 ? '+' : '-'}${Math.abs(totalProfit).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Upgrades & Settings */}
+              <div className="space-y-2">
+                <button className="w-full flex items-center justify-between p-3 rounded-xl bg-[#182228]/50 hover:bg-[#182228] border border-[#24323a] transition-colors group">
+                  <div className="flex items-center gap-3">
+                    <Shield size={16} className="text-[#8e9ca5] group-hover:text-white" />
+                    <span className="text-sm font-semibold text-[#ecf4ee]">Switch to Real Account</span>
+                  </div>
+                  <ChevronDown size={14} className="text-[#5c6a72] -rotate-90" />
+                </button>
+                
+                <div className="pt-2 border-t border-[#182228] mt-2">
+                  <button className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-[#ff4d67]/10 text-[#ff4d67] transition-colors group">
+                    <LogOut size={16} />
+                    <span className="text-sm font-semibold">Sign Out</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Fixed Position Popovers ── */}
       {isExpiryOpen && (
         <div
           ref={timePopoverRef}
@@ -602,7 +734,6 @@ export default function TerminalPage() {
         </div>
       )}
 
-      {/* Amount Popover */}
       {isAmountOpen && (
         <div
           ref={amountPopoverRef}
