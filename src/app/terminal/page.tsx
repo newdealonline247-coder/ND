@@ -617,7 +617,7 @@ export default function TerminalPage() {
             <div className="text-[10px] text-[#5c6a72] font-bold uppercase tracking-widest">
               {accountType === "DEMO"
                 ? "Demo Balance"
-                : `${propUser?.planName ?? "Challenge"} Balance`}
+                : `${propUser?.planName ?? "Pro"} Balance`}
             </div>
             <div
               suppressHydrationWarning
@@ -632,18 +632,21 @@ export default function TerminalPage() {
                 : "10,000.00"}
             </div>
           </div>
-          <button
-            onClick={() => {
-              if (accountType === "DEMO") setDemoBalance(10000);
-              else if (propUser) setRealBalance(propUser.accountSize);
-              setTradeResults([]);
-              setActiveTrades([]);
-            }}
-            className="p-2 hover:bg-[#0d161a] rounded-xl text-[#8e9ca5] hover:text-white border border-[#24323a] flex items-center gap-1.5 text-xs"
-          >
-            <RefreshCw size={13} />
-            <span className="text-[10px] font-bold hidden md:inline">RESET</span>
-          </button>
+
+          {accountType === "DEMO" && (
+            <button
+              onClick={() => {
+                setDemoBalance(10000);
+                setTradeResults([]);
+                setActiveTrades([]);
+              }}
+              className="p-2 hover:bg-[#0d161a] rounded-xl text-[#8e9ca5] hover:text-white border border-[#24323a] flex items-center gap-1.5 text-xs transition-colors"
+              title="Reset Demo Balance to $10,000.00"
+            >
+              <RefreshCw size={13} />
+              <span className="text-[10px] font-bold hidden md:inline">RESET DEMO</span>
+            </button>
+          )}
         </div>
       </header>
 
