@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   TrendingUp, TrendingDown, Clock, ChevronDown, 
-  Search, User, Settings, BarChart2, HelpCircle, CheckCircle2, XCircle, RefreshCw
+  Search, User, Settings, BarChart2, HelpCircle, CheckCircle2, XCircle, RefreshCw, Plus, Minus
 } from 'lucide-react';
 import TradingViewChart from '@/components/TradingViewChart';
 
@@ -24,6 +24,7 @@ interface ActiveTrade {
   amount: number;
   payoutRate: number;
   durationSec: number;
+  totalDuration: number;
   timeRemaining: number;
   createdAt: number;
 }
@@ -34,6 +35,9 @@ interface TradeResult {
   type: 'HIGHER' | 'LOWER';
   amount: number;
   payout: number;
+  entryPrice: number;
+  closePrice: number;
+  closeTime: number;
   win: boolean;
   tie: boolean;
 }
@@ -84,11 +88,18 @@ export default function TerminalPage() {
   const [assetSearch, setAssetSearch] = useState('');
   const [price, setPrice] = useState<number | null>(null);
   const [prevPrice, setPrevPrice] = useState<number | null>(null);
+  
   const [amount, setAmount] = useState('10');
-  const [expiry, setExpiry] = useState('30s');
+  const [expirySec, setExpirySec] = useState(60); // Default 1 minute
+  
   const [balance, setBalance] = useState<number>(10000);
   const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
   const [tradeResults, setTradeResults] = useState<TradeResult[]>([]);
+  
+  const [isTradesOpen, setIsTradesOpen] = useState(false);
+  const [tradeTab, setTradeTab] = useState<'active' | 'closed'>('active');
+  const [serverTime, setServerTime] = useState(new Date());
+
   const dropdownRef = useRef<HTMLDivElement>(null);
   const priceRef = useRef<number | null>(null);
 
@@ -111,6 +122,13 @@ export default function TerminalPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Server Time Tick
+  useEffect(() => {
+    const timer = setInterval(() => setServerTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Live Price Sync Logic
   useEffect(() => {
     setPrice(null);
     let ws: WebSocket | null = null;
@@ -154,6 +172,7 @@ export default function TerminalPage() {
     return () => ws?.close();
   }, [selectedAsset]);
 
+  // Active Trade Countdown and Settlement Timer
   useEffect(() => {
     if (activeTrades.length === 0) return;
     const interval = setInterval(() => {
@@ -165,9 +184,23 @@ export default function TerminalPage() {
           if (nextTime <= 0) {
             const curP = currentPriceVal || trade.entryPrice;
             const isWin = trade.type === 'HIGHER' ? curP > trade.entryPrice : curP < trade.entryPrice;
-            const payoutAmount = isWin ? trade.amount * (1 + trade.payoutRate) : (curP === trade.entryPrice ? trade.amount : 0);
+            const isTie = curP === trade.entryPrice;
+            const payoutAmount = isWin ? trade.amount * (1 + trade.payoutRate) : (isTie ? trade.amount : 0);
+            
             if (payoutAmount > 0) setBalance(b => b + payoutAmount);
-            setTradeResults(r => [{ id: trade.id, assetName: trade.assetName, type: trade.type, amount: trade.amount, payout: payoutAmount, win: isWin, tie: curP === trade.entryPrice }, ...r].slice(0, 3));
+            
+            setTradeResults(r => [{ 
+              id: trade.id, 
+              assetName: trade.assetName, 
+              type: trade.type, 
+              amount: trade.amount, 
+              payout: payoutAmount,
+              entryPrice: trade.entryPrice,
+              closePrice: curP,
+              closeTime: Date.now(),
+              win: isWin, 
+              tie: isTie 
+            }, ...r]);
           } else {
             remainingTrades.push({ ...trade, timeRemaining: nextTime });
           }
@@ -178,17 +211,31 @@ export default function TerminalPage() {
     return () => clearInterval(interval);
   }, [activeTrades.length]);
 
+  const handleExpiryChange = (delta: number) => {
+    setExpirySec(prev => Math.max(5, prev + delta));
+  };
+
   const handlePlaceTrade = (type: 'HIGHER' | 'LOWER') => {
     const tradeAmount = parseFloat(amount);
     if (!price || tradeAmount > balance || isNaN(tradeAmount) || tradeAmount <= 0) return;
     setBalance(prev => prev - tradeAmount);
-    const dur = expiry.endsWith('s') ? parseInt(expiry) : parseInt(expiry) * 60;
-    setActiveTrades(prev => [...prev, {
+    
+    setActiveTrades(prev => [{
       id: Math.random().toString(36).substr(2, 9),
-      assetId: selectedAsset.id, assetName: selectedAsset.name, type,
-      entryPrice: price, amount: tradeAmount, payoutRate: selectedAsset.payout / 100,
-      durationSec: dur, timeRemaining: dur, createdAt: Date.now()
-    }]);
+      assetId: selectedAsset.id, 
+      assetName: selectedAsset.name, 
+      type,
+      entryPrice: price, 
+      amount: tradeAmount, 
+      payoutRate: selectedAsset.payout / 100,
+      durationSec: expirySec, 
+      totalDuration: expirySec,
+      timeRemaining: expirySec, 
+      createdAt: Date.now()
+    }, ...prev]);
+    
+    setIsTradesOpen(true);
+    setTradeTab('active');
   };
 
   const formatPrice = (p: number | null, assetId: string = selectedAsset.id, assetType: string = selectedAsset.type) => {
@@ -198,6 +245,12 @@ export default function TerminalPage() {
     return p.toLocaleString(undefined, { minimumFractionDigits: isJPY ? 3 : (isCrypto ? 2 : 5), maximumFractionDigits: isJPY ? 3 : (isCrypto ? 2 : 5) });
   };
 
+  const formatTimeStr = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
   const resetBalance = () => {
     setBalance(10000);
     setActiveTrades([]);
@@ -205,7 +258,7 @@ export default function TerminalPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#05080a] text-[#ecf4ee] overflow-hidden font-sans select-none">
+    <div className="flex flex-col h-screen bg-[#05080a] text-[#ecf4ee] overflow-hidden font-sans select-none relative">
       {/* Header */}
       <header className="h-[60px] border-b border-[#182228] bg-[#05080a] flex items-center justify-between px-5 z-50 gap-4">
         {/* Logo & Asset Selector */}
@@ -260,48 +313,36 @@ export default function TerminalPage() {
           </div>
         </div>
 
-        {/* Live Active Trades Feed Bar */}
+        {/* Live Active Trades Minimal Bar (Header) */}
         <div className="flex-1 flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-3 border-x border-[#182228] min-w-0">
-          {activeTrades.length === 0 && tradeResults.length === 0 && (
+          {activeTrades.length === 0 && (
             <div className="text-xs text-[#5c6a72] font-medium flex items-center gap-2">
               <span className="live-dot size-2 rounded-full bg-[#b6ff3b]" />
               PRACTICE TERMINAL LIVE — NO ACTIVE POSITIONS
             </div>
           )}
-
-          {activeTrades.map(trade => {
-            const isWinning = trade.type === 'HIGHER' ? (priceRef.current || 0) > trade.entryPrice : (priceRef.current || 0) < trade.entryPrice;
+          {activeTrades.slice(0, 3).map(trade => {
+            const currentP = priceRef.current || trade.entryPrice;
+            const isWinning = trade.type === 'HIGHER' ? currentP > trade.entryPrice : currentP < trade.entryPrice;
             return (
-              <div key={trade.id} className={`flex items-center gap-2.5 px-3 py-1 rounded-xl border transition-all shrink-0 ${isWinning ? 'bg-[#2bd98a]/10 border-[#2bd98a]/50 text-[#2bd98a]' : 'bg-[#ff4d67]/10 border-[#ff4d67]/50 text-[#ff4d67]'}`}>
-                <div className="flex items-center gap-1">
-                  {trade.type === 'HIGHER' ? <TrendingUp size={14} className="text-[#2bd98a]" /> : <TrendingDown size={14} className="text-[#ff4d67]" />}
-                  <span className="font-bold text-xs">{trade.assetName}</span>
-                </div>
-                <div className="h-4 w-[1px] bg-[#24323a]" />
-                <div className="flex flex-col text-[11px] leading-tight font-mono">
-                  <span className="text-[#8e9ca5] font-sans font-bold">${trade.amount}</span>
-                  <span className="font-bold text-white">{Math.floor(trade.timeRemaining/60)}:{(trade.timeRemaining%60).toString().padStart(2,'0')}</span>
-                </div>
-                <div className="h-4 w-[1px] bg-[#24323a]" />
-                <div className="flex flex-col text-right font-mono text-[11px] leading-tight">
-                  <span className="text-[10px] text-[#5c6a72]">Return</span>
-                  <span className={`font-bold ${isWinning ? 'text-[#b6ff3b]' : 'text-[#8e9ca5]'}`}>{isWinning ? `+$${(trade.amount*(1+trade.payoutRate)).toFixed(2)}` : '$0.00'}</span>
-                </div>
+              <div key={trade.id} onClick={() => {setIsTradesOpen(true); setTradeTab('active');}} className={`flex items-center gap-2 px-3 py-1 rounded-xl border cursor-pointer hover:opacity-80 transition-all shrink-0 ${isWinning ? 'bg-[#2bd98a]/10 border-[#2bd98a]/50 text-[#2bd98a]' : 'bg-[#ff4d67]/10 border-[#ff4d67]/50 text-[#ff4d67]'}`}>
+                {trade.type === 'HIGHER' ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                <span className="font-bold text-[11px]">{trade.assetName}</span>
+                <span className="font-mono font-bold text-[11px] ml-1 text-white">{formatTimeStr(trade.timeRemaining)}</span>
               </div>
             );
           })}
-
-          {tradeResults.map(res => (
-            <div key={res.id} className={`flex items-center gap-2 px-2.5 py-1 rounded-xl border text-xs shrink-0 ${res.win ? 'bg-[#2bd98a]/10 border-[#2bd98a]/40 text-[#2bd98a]' : 'bg-[#ff4d67]/10 border-[#ff4d67]/40 text-[#ff4d67]'}`}>
-              {res.win ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
-              <span className="font-bold text-[11px]">{res.assetName}</span>
-              <span className="font-mono text-[11px] font-bold">{res.win ? `+$${res.payout.toFixed(2)}` : `-$${res.amount.toFixed(2)}`}</span>
-            </div>
-          ))}
         </div>
 
-        {/* Demo Balance Controls */}
+        {/* Server Time & Demo Balance Controls */}
         <div className="flex items-center gap-4 shrink-0">
+          <div className="hidden lg:flex items-center gap-2 px-4 border-r border-[#182228]">
+            <Clock size={14} className="text-[#5c6a72]" />
+            <span className="text-xs font-mono font-bold text-[#8e9ca5]">
+              {serverTime.getUTCHours().toString().padStart(2, '0')}:{serverTime.getUTCMinutes().toString().padStart(2, '0')}:{serverTime.getUTCSeconds().toString().padStart(2, '0')} UTC
+            </span>
+          </div>
+
           <div className="flex bg-[#0a1114] rounded-full p-1 border border-[#24323a]">
             <button className="px-3.5 py-1 text-xs font-bold rounded-full bg-[#182228] text-white shadow-sm">DEMO</button>
             <button className="px-3.5 py-1 text-xs font-bold rounded-full text-[#5c6a72] hover:text-[#8e9ca5] transition-colors">REAL</button>
@@ -320,11 +361,26 @@ export default function TerminalPage() {
       </header>
 
       {/* Main Content Workspace */}
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex overflow-hidden relative">
         {/* Left Toolbar */}
-        <div className="w-14 border-r border-[#182228] bg-[#05080a] flex flex-col items-center py-5 gap-6">
-          <button className="p-2.5 text-[#b6ff3b] bg-[#b6ff3b]/10 rounded-xl shadow-[0_0_15px_rgba(182,255,59,0.15)]"><BarChart2 size={20} /></button>
-          <button className="p-2.5 text-[#5c6a72] hover:text-white transition-colors"><Clock size={20} /></button>
+        <div className="w-14 border-r border-[#182228] bg-[#05080a] flex flex-col items-center py-5 gap-6 z-50 relative">
+          <button className="p-2.5 text-[#5c6a72] hover:text-[#b6ff3b] transition-colors"><BarChart2 size={20} /></button>
+          
+          {/* Trades Toggle Button */}
+          <div className="relative">
+            <button 
+              onClick={() => setIsTradesOpen(!isTradesOpen)}
+              className={`p-2.5 rounded-xl transition-all ${isTradesOpen ? 'bg-[#b6ff3b] text-[#0a0f04] shadow-[0_0_15px_rgba(182,255,59,0.3)]' : 'text-[#5c6a72] hover:text-white'}`}
+            >
+              <Clock size={20} />
+            </button>
+            {activeTrades.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-[#b6ff3b] text-[#0a0f04] font-bold text-[9px] flex items-center justify-center rounded-full">
+                {activeTrades.length}
+              </span>
+            )}
+          </div>
+
           <button className="p-2.5 text-[#5c6a72] hover:text-white transition-colors"><User size={20} /></button>
           <div className="mt-auto flex flex-col gap-6">
             <button className="p-2.5 text-[#5c6a72] hover:text-white transition-colors"><Settings size={20} /></button>
@@ -332,13 +388,112 @@ export default function TerminalPage() {
           </div>
         </div>
 
+        {/* Trade History Slide-Out Panel */}
+        <div className={`absolute left-14 top-0 bottom-0 w-80 bg-[#0a1114] border-r border-[#182228] z-40 shadow-2xl transition-transform duration-300 flex flex-col ${isTradesOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+          <div className="flex items-center justify-between p-4 border-b border-[#182228]">
+            <div className="flex gap-4">
+              <button onClick={() => setTradeTab('active')} className={`text-xs font-bold uppercase tracking-wider pb-1 transition-colors ${tradeTab === 'active' ? 'text-[#b6ff3b] border-b-2 border-[#b6ff3b]' : 'text-[#5c6a72] hover:text-[#8e9ca5]'}`}>
+                Active ({activeTrades.length})
+              </button>
+              <button onClick={() => setTradeTab('closed')} className={`text-xs font-bold uppercase tracking-wider pb-1 transition-colors ${tradeTab === 'closed' ? 'text-white border-b-2 border-white' : 'text-[#5c6a72] hover:text-[#8e9ca5]'}`}>
+                Closed
+              </button>
+            </div>
+            <button onClick={() => setIsTradesOpen(false)} className="text-[#5c6a72] hover:text-white"><XCircle size={16}/></button>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
+            {tradeTab === 'active' && activeTrades.length === 0 && (
+              <div className="text-center text-[#5c6a72] text-xs font-medium py-10 italic">No active trades.</div>
+            )}
+            
+            {tradeTab === 'active' && activeTrades.map(trade => {
+              const curP = priceRef.current || trade.entryPrice;
+              const isWinning = trade.type === 'HIGHER' ? curP > trade.entryPrice : curP < trade.entryPrice;
+              const pct = (trade.timeRemaining / trade.totalDuration) * 100;
+
+              return (
+                <div key={trade.id} className="bg-[#05080a] border border-[#24323a] rounded-xl overflow-hidden shadow-sm">
+                  <div className="p-3">
+                    <div className="flex justify-between items-center mb-2.5">
+                      <div className="flex items-center gap-1.5">
+                        {trade.type === 'HIGHER' ? <TrendingUp size={14} className="text-[#2bd98a]" /> : <TrendingDown size={14} className="text-[#ff4d67]" />}
+                        <span className="font-bold text-xs">{trade.assetName}</span>
+                      </div>
+                      <span className="font-mono text-xs font-bold text-white bg-[#182228] px-2 py-0.5 rounded">{formatTimeStr(trade.timeRemaining)}</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-end mb-2">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-[#5c6a72] uppercase font-bold">Invested</span>
+                        <span className="font-mono font-bold text-xs text-[#8e9ca5]">${trade.amount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5 text-right">
+                        <span className="text-[10px] text-[#5c6a72] uppercase font-bold">Expected Return</span>
+                        <span className={`font-mono font-bold text-xs ${isWinning ? 'text-[#b6ff3b]' : 'text-[#ff4d67]'}`}>
+                          {isWinning ? `+$${(trade.amount * (1 + trade.payoutRate)).toFixed(2)}` : '$0.00'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[10px] font-mono text-[#5c6a72] bg-[#0a1114] p-1.5 rounded-lg border border-[#182228]">
+                      <span>{formatPrice(trade.entryPrice, trade.assetId)}</span>
+                      <span>➔</span>
+                      <span className={isWinning ? 'text-[#2bd98a]' : 'text-[#ff4d67]'}>{formatPrice(curP, trade.assetId)}</span>
+                    </div>
+                  </div>
+                  {/* Progress Bar */}
+                  <div className="h-1 w-full bg-[#182228]">
+                    <div className={`h-full transition-all duration-1000 linear ${isWinning ? 'bg-[#2bd98a]' : 'bg-[#ff4d67]'}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+
+            {tradeTab === 'closed' && tradeResults.length === 0 && (
+              <div className="text-center text-[#5c6a72] text-xs font-medium py-10 italic">No trade history yet.</div>
+            )}
+
+            {tradeTab === 'closed' && tradeResults.map(res => (
+              <div key={res.id} className="bg-[#05080a] border border-[#24323a] rounded-xl overflow-hidden shadow-sm p-3 opacity-80 hover:opacity-100 transition-opacity">
+                <div className="flex justify-between items-center mb-2.5">
+                  <div className="flex items-center gap-1.5">
+                    {res.win ? <CheckCircle2 size={14} className="text-[#2bd98a]" /> : <XCircle size={14} className="text-[#ff4d67]" />}
+                    <span className="font-bold text-xs">{res.assetName}</span>
+                  </div>
+                  <span className="font-mono text-[10px] text-[#5c6a72]">{new Date(res.closeTime).toLocaleTimeString()}</span>
+                </div>
+                
+                <div className="flex justify-between items-end mb-2">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[10px] text-[#5c6a72] uppercase font-bold">Invested</span>
+                    <span className="font-mono font-bold text-xs text-[#8e9ca5]">${res.amount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 text-right">
+                    <span className="text-[10px] text-[#5c6a72] uppercase font-bold">Result</span>
+                    <span className={`font-mono font-bold text-xs ${res.win ? 'text-[#2bd98a]' : 'text-[#ff4d67]'}`}>
+                      {res.win ? `+$${res.payout.toFixed(2)}` : `-$${res.amount.toFixed(2)}`}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center text-[10px] font-mono text-[#5c6a72] bg-[#0a1114] p-1.5 rounded-lg border border-[#182228]">
+                  <span>{formatPrice(res.entryPrice)}</span>
+                  <span>➔</span>
+                  <span className={res.win ? 'text-[#2bd98a]' : 'text-[#ff4d67]'}>{formatPrice(res.closePrice)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Chart Viewport */}
-        <div className="flex-1 relative bg-[#05080a]">
+        <div className="flex-1 relative bg-[#05080a] z-10">
           <TradingViewChart symbol={selectedAsset.symbol} />
         </div>
 
         {/* Right Trade Sidebar */}
-        <div className="w-80 border-l border-[#182228] bg-[#05080a] p-5 flex flex-col gap-6">
+        <div className="w-80 border-l border-[#182228] bg-[#05080a] p-5 flex flex-col gap-6 z-20 relative">
           {/* Live Price Box */}
           <div className="bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-sm">
             <div className="flex items-center justify-between mb-1.5">
@@ -353,17 +508,38 @@ export default function TerminalPage() {
           </div>
 
           <div className="space-y-5">
-            {/* Expiry Selector */}
+            {/* Custom Expiry Selector */}
             <div>
-              <label className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest mb-2.5 block">Expiration Time</label>
+              <div className="flex items-center justify-between mb-2.5">
+                <label className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest">Expiration</label>
+                <Clock size={12} className="text-[#5c6a72]" />
+              </div>
+              
+              <div className="flex items-center justify-between bg-[#0a1114] border border-[#24323a] rounded-xl p-1 mb-2">
+                <button onClick={() => handleExpiryChange(expirySec < 60 ? -15 : -60)} className="p-2.5 text-[#5c6a72] hover:bg-[#182228] hover:text-white rounded-lg transition-colors">
+                  <Minus size={16} />
+                </button>
+                <div className="font-mono font-bold text-white text-lg tracking-widest">
+                  00:{Math.floor(expirySec / 60).toString().padStart(2, '0')}:{(expirySec % 60).toString().padStart(2, '0')}
+                </div>
+                <button onClick={() => handleExpiryChange(expirySec < 60 ? 15 : 60)} className="p-2.5 text-[#5c6a72] hover:bg-[#182228] hover:text-white rounded-lg transition-colors">
+                  <Plus size={16} />
+                </button>
+              </div>
+
               <div className="grid grid-cols-4 gap-1.5">
-                {['30s', '1m', '2m', '5m'].map(t => (
+                {[
+                  { label: '30s', val: 30 }, 
+                  { label: '1m', val: 60 }, 
+                  { label: '2m', val: 120 }, 
+                  { label: '5m', val: 300 }
+                ].map(t => (
                   <button 
-                    key={t} 
-                    onClick={() => setExpiry(t)} 
-                    className={`py-2.5 text-xs font-bold rounded-xl border transition-all ${expiry === t ? 'bg-[#b6ff3b] text-[#0a0f04] border-[#b6ff3b] shadow-[0_0_15px_rgba(182,255,59,0.25)]' : 'bg-[#0a1114] text-[#8e9ca5] border-[#24323a] hover:border-[#b6ff3b]/40'}`}
+                    key={t.label} 
+                    onClick={() => setExpirySec(t.val)} 
+                    className={`py-2 text-xs font-bold rounded-lg border transition-all ${expirySec === t.val ? 'bg-[#24323a] text-white border-[#5c6a72]' : 'bg-[#0a1114] text-[#5c6a72] border-[#182228] hover:border-[#24323a]'}`}
                   >
-                    {t}
+                    {t.label}
                   </button>
                 ))}
               </div>
@@ -407,7 +583,7 @@ export default function TerminalPage() {
           <div className="mt-auto space-y-3">
             <button 
               onClick={() => handlePlaceTrade('HIGHER')} 
-              className="w-full bg-[#b6ff3b] hover:bg-[#a3eb2e] text-[#0a0f04] font-black py-4 rounded-full flex items-center justify-center gap-2 transition-all shadow-[0_0_25px_rgba(182,255,59,0.3)] hover:shadow-[0_0_35px_rgba(182,255,59,0.45)] cursor-pointer"
+              className="w-full bg-[#2bd98a] hover:bg-[#23b874] text-[#05080a] font-black py-4 rounded-full flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(43,217,138,0.2)] hover:shadow-[0_0_30px_rgba(43,217,138,0.35)] cursor-pointer"
             >
               <TrendingUp size={20} strokeWidth={2.5} />
               <span className="uppercase tracking-wider text-sm font-extrabold">Buy / Higher</span>
