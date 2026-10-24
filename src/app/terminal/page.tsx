@@ -1,8 +1,8 @@
 ﻿"use client";
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { 
-  TrendingUp, TrendingDown, Clock, ChevronDown, 
+import {
+  TrendingUp, TrendingDown, Clock, ChevronDown,
   Search, User, Settings, BarChart2, HelpCircle, CheckCircle2, XCircle, RefreshCw, Plus, Minus, Delete
 } from 'lucide-react';
 import TradingViewChart from '@/components/TradingViewChart';
@@ -57,13 +57,13 @@ export default function TerminalPage() {
   const [assetSearch, setAssetSearch] = useState('');
   const [price, setPrice] = useState<number | null>(null);
   const [prevPrice, setPrevPrice] = useState<number | null>(null);
-  
+
   const [amount, setAmount] = useState('10');
   const [isAmountOpen, setIsAmountOpen] = useState(false);
-  
+
   const [expirySec, setExpirySec] = useState(60);
   const [isExpiryOpen, setIsExpiryOpen] = useState(false);
-  
+
   const [balance, setBalance] = useState<number>(10000);
   const [activeTrades, setActiveTrades] = useState<ActiveTrade[]>([]);
   const [tradeResults, setTradeResults] = useState<TradeResult[]>([]);
@@ -78,7 +78,7 @@ export default function TerminalPage() {
 
   useEffect(() => { priceRef.current = price; }, [price]);
 
-  const filteredAssets = useMemo(() => 
+  const filteredAssets = useMemo(() =>
     ASSETS.filter(a => a.name.toLowerCase().includes(assetSearch.toLowerCase()) || a.type.toLowerCase().includes(assetSearch.toLowerCase())),
     [assetSearch]
   );
@@ -148,12 +148,12 @@ export default function TerminalPage() {
             const isWin = trade.type === 'HIGHER' ? curP > trade.entryPrice : curP < trade.entryPrice;
             const isTie = curP === trade.entryPrice;
             const payoutAmount = isWin ? trade.amount * (1 + trade.payoutRate) : (isTie ? trade.amount : 0);
-            
+
             if (payoutAmount > 0) setBalance(b => b + payoutAmount);
-            
-            setTradeResults(r => [{ 
+
+            setTradeResults(r => [{
               id: trade.id, assetName: trade.assetName, type: trade.type, amount: trade.amount, payout: payoutAmount,
-              entryPrice: trade.entryPrice, closePrice: curP, closeTime: Date.now(), win: isWin, tie: isTie 
+              entryPrice: trade.entryPrice, closePrice: curP, closeTime: Date.now(), win: isWin, tie: isTie
             }, ...r]);
           } else {
             remainingTrades.push({ ...trade, timeRemaining: nextTime });
@@ -366,7 +366,7 @@ export default function TerminalPage() {
         <div className="w-80 border-l border-[#182228] bg-[#05080a] flex flex-col z-20 relative shadow-[-10px_0_20px_rgba(0,0,0,0.2)]">
           {/* Scrollable Center Settings Area */}
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5 no-scrollbar">
-            
+
             <div className="bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-sm shrink-0">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest flex items-center gap-1.5"><span className="live-dot size-2 rounded-full bg-[#b6ff3b]" />Live Price</span>
@@ -376,47 +376,70 @@ export default function TerminalPage() {
 
             <div className="space-y-4 shrink-0 relative" ref={expiryRef}>
               <label className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest block">Time</label>
-              <button 
-                onClick={() => { setIsExpiryOpen(!isExpiryOpen); setIsAmountOpen(false); }} 
+              <button
+                onClick={() => { setIsExpiryOpen(!isExpiryOpen); setIsAmountOpen(false); }}
                 className={`w-full flex items-center justify-between bg-[#0a1114] border ${isExpiryOpen ? 'border-[#b6ff3b]' : 'border-[#24323a] hover:border-[#b6ff3b]/40'} rounded-xl p-3 transition-colors`}
               >
                 <span className="font-mono font-bold text-white text-lg tracking-widest">{formatTimeStr(expirySec)}</span>
                 <Clock size={16} className="text-[#5c6a72]" />
               </button>
 
-              {/* Popup Expiry Selector - Extends to the Left */}
+              {/* ── Time Popover (only section modified) ── */}
               {isExpiryOpen && (
-                <div className="absolute right-[calc(100%+24px)] top-4 w-72 bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-2xl animate-in fade-in slide-in-from-right-4 z-50">
-                   <div className="grid grid-cols-3 gap-2 mb-4 text-center">
-                     <div className="flex flex-col gap-1 items-center">
-                       <button onClick={() => updateExpiry('h', 1)} className="w-10 h-8 bg-[#182228] hover:bg-[#24323a] rounded-lg text-[#ecf4ee] flex items-center justify-center"><Plus size={14}/></button>
-                       <span className="font-mono font-bold text-lg text-white">{Math.floor(expirySec / 3600).toString().padStart(2, '0')}</span>
-                       <button onClick={() => updateExpiry('h', -1)} className="w-10 h-8 bg-[#182228] hover:bg-[#24323a] rounded-lg text-[#ecf4ee] flex items-center justify-center"><Minus size={14}/></button>
-                     </div>
-                     <div className="flex flex-col gap-1 items-center">
-                       <button onClick={() => updateExpiry('m', 1)} className="w-10 h-8 bg-[#182228] hover:bg-[#24323a] rounded-lg text-[#ecf4ee] flex items-center justify-center"><Plus size={14}/></button>
-                       <span className="font-mono font-bold text-lg text-white">{Math.floor((expirySec % 3600) / 60).toString().padStart(2, '0')}</span>
-                       <button onClick={() => updateExpiry('m', -1)} className="w-10 h-8 bg-[#182228] hover:bg-[#24323a] rounded-lg text-[#ecf4ee] flex items-center justify-center"><Minus size={14}/></button>
-                     </div>
-                     <div className="flex flex-col gap-1 items-center">
-                       <button onClick={() => updateExpiry('s', 15)} className="w-10 h-8 bg-[#182228] hover:bg-[#24323a] rounded-lg text-[#ecf4ee] flex items-center justify-center"><Plus size={14}/></button>
-                       <span className="font-mono font-bold text-lg text-white">{(expirySec % 60).toString().padStart(2, '0')}</span>
-                       <button onClick={() => updateExpiry('s', -15)} className="w-10 h-8 bg-[#182228] hover:bg-[#24323a] rounded-lg text-[#ecf4ee] flex items-center justify-center"><Minus size={14}/></button>
-                     </div>
-                   </div>
-                   <div className="grid grid-cols-3 gap-1.5">
-                     {[{l:'S15', v:15}, {l:'S30', v:30}, {l:'M1', v:60}, {l:'M2', v:120}, {l:'M3', v:180}, {l:'M5', v:300}, {l:'M15', v:900}, {l:'M30', v:1800}, {l:'H1', v:3600}].map(t => (
-                       <button key={t.l} onClick={() => {setExpirySec(t.v); setIsExpiryOpen(false);}} className="py-2 text-xs font-bold rounded-lg bg-[#05080a] text-[#8e9ca5] hover:bg-[#182228] hover:text-white border border-[#182228]">{t.l}</button>
-                     ))}
-                   </div>
+                <div className="absolute right-[calc(100%+16px)] top-0 w-[300px] bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-2xl z-50">
+                  {/* HH : MM : SS steppers */}
+                  <div className="flex items-center justify-center gap-1 mb-4 bg-[#05080a] rounded-xl border border-[#182228] p-3">
+                    {/* Hours */}
+                    <div className="flex flex-col items-center gap-1">
+                      <button onClick={() => updateExpiry('h', 1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={14} /></button>
+                      <span className="font-mono font-bold text-xl text-white w-11 text-center py-1">{Math.floor(expirySec / 3600).toString().padStart(2, '0')}</span>
+                      <button onClick={() => updateExpiry('h', -1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Minus size={14} /></button>
+                    </div>
+                    <span className="font-mono font-bold text-xl text-[#5c6a72] mb-1">:</span>
+                    {/* Minutes */}
+                    <div className="flex flex-col items-center gap-1">
+                      <button onClick={() => updateExpiry('m', 1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={14} /></button>
+                      <span className="font-mono font-bold text-xl text-[#b6ff3b] w-11 text-center py-1">{Math.floor((expirySec % 3600) / 60).toString().padStart(2, '0')}</span>
+                      <button onClick={() => updateExpiry('m', -1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Minus size={14} /></button>
+                    </div>
+                    <span className="font-mono font-bold text-xl text-[#5c6a72] mb-1">:</span>
+                    {/* Seconds */}
+                    <div className="flex flex-col items-center gap-1">
+                      <button onClick={() => updateExpiry('s', 1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Plus size={14} /></button>
+                      <span className="font-mono font-bold text-xl text-white w-11 text-center py-1">{(expirySec % 60).toString().padStart(2, '0')}</span>
+                      <button onClick={() => updateExpiry('s', -1)} className="w-11 h-8 rounded-lg bg-[#182228] hover:bg-[#24323a] text-[#8e9ca5] hover:text-white flex items-center justify-center transition-colors"><Minus size={14} /></button>
+                    </div>
+                  </div>
+
+                  {/* Quick duration chips */}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { l: 'S5', v: 5 }, { l: 'S15', v: 15 }, { l: 'S30', v: 30 },
+                      { l: 'M1', v: 60 }, { l: 'M3', v: 180 }, { l: 'M5', v: 300 },
+                      { l: 'M15', v: 900 }, { l: 'M30', v: 1800 }, { l: 'H1', v: 3600 },
+                      { l: 'H4', v: 14400 },
+                    ].map(t => (
+                      <button
+                        key={t.l}
+                        onClick={() => { setExpirySec(t.v); setIsExpiryOpen(false); }}
+                        className={`py-2 text-xs font-bold rounded-lg border transition-all ${
+                          expirySec === t.v
+                            ? 'bg-[#b6ff3b] text-[#0a0f04] border-[#b6ff3b]'
+                            : 'bg-[#05080a] text-[#8e9ca5] border-[#182228] hover:bg-[#182228] hover:text-white'
+                        }`}
+                      >
+                        {t.l}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
 
             <div className="space-y-4 shrink-0 relative" ref={amountRef}>
               <label className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest block">Amount</label>
-              <button 
-                onClick={() => { setIsAmountOpen(!isAmountOpen); setIsExpiryOpen(false); }} 
+              <button
+                onClick={() => { setIsAmountOpen(!isAmountOpen); setIsExpiryOpen(false); }}
                 className={`w-full flex items-center justify-between bg-[#0a1114] border ${isAmountOpen ? 'border-[#b6ff3b]' : 'border-[#24323a] hover:border-[#b6ff3b]/40'} rounded-xl p-3 transition-colors`}
               >
                 <div className="flex items-center gap-2">
@@ -425,27 +448,57 @@ export default function TerminalPage() {
                 </div>
               </button>
 
-              {/* Popup Amount Calculator - Extends to the Left */}
+              {/* ── Amount Popover (only section modified) ── */}
               {isAmountOpen && (
-                <div className="absolute right-[calc(100%+24px)] top-4 w-60 bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-2xl animate-in fade-in slide-in-from-right-4 z-50">
-                  <div className="flex gap-2 mb-3">
-                    <div className="flex-1 bg-[#05080a] border border-[#182228] rounded-xl px-3 py-2 flex items-center">
-                      <span className="text-[#5c6a72] font-bold mr-1">$</span>
-                      <span className="text-white font-mono font-bold">{amount}</span>
+                <div className="absolute right-[calc(100%+16px)] top-0 w-[260px] bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-2xl z-50">
+                  {/* Value display + multipliers */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex-1 bg-[#05080a] border border-[#182228] rounded-xl px-3 py-2.5 flex items-center gap-1">
+                      <span className="text-[#5c6a72] font-bold text-sm">$</span>
+                      <span className="text-white font-mono font-bold text-lg tracking-tight">{amount}</span>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <button onClick={() => setAmount((parseFloat(amount||'0')*2).toString())} className="w-8 h-5 bg-[#182228] hover:bg-[#24323a] rounded flex items-center justify-center text-[9px] font-bold text-[#ecf4ee]">x2</button>
-                      <button onClick={() => setAmount(Math.max(1, parseFloat(amount||'0')/2).toString())} className="w-8 h-5 bg-[#182228] hover:bg-[#24323a] rounded flex items-center justify-center text-[9px] font-bold text-[#ecf4ee]">/2</button>
+                      <button
+                        onClick={() => setAmount(String(Math.min(balance, (parseFloat(amount) || 0) * 2)))}
+                        className="w-9 h-6 bg-[#182228] hover:bg-[#24323a] rounded-md flex items-center justify-center text-[10px] font-bold text-[#ecf4ee] transition-colors"
+                      >×2</button>
+                      <button
+                        onClick={() => setAmount(String(Math.max(1, Math.floor((parseFloat(amount) || 0) / 2))))}
+                        className="w-9 h-6 bg-[#182228] hover:bg-[#24323a] rounded-md flex items-center justify-center text-[10px] font-bold text-[#ecf4ee] transition-colors"
+                      >÷2</button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5">
+
+                  {/* Numpad */}
+                  <div className="grid grid-cols-3 gap-1.5 mb-3">
                     {['7','8','9','4','5','6','1','2','3','.','0','back'].map(k => (
-                      <button 
-                        key={k} 
-                        onClick={() => handleNumpad(k)} 
-                        className="h-10 bg-[#05080a] hover:bg-[#182228] border border-[#182228] rounded-lg flex items-center justify-center text-sm font-bold text-[#ecf4ee] transition-colors"
+                      <button
+                        key={k}
+                        onClick={() => handleNumpad(k)}
+                        className={`h-11 rounded-xl flex items-center justify-center text-sm font-bold transition-colors border ${
+                          k === 'back'
+                            ? 'bg-[#182228]/60 border-[#182228] text-[#ff4d67] hover:bg-[#ff4d67]/15'
+                            : 'bg-[#05080a] border-[#182228] text-[#ecf4ee] hover:bg-[#182228] hover:border-[#24323a]'
+                        }`}
                       >
-                        {k === 'back' ? <Delete size={16} className="text-[#ff4d67]" /> : k}
+                        {k === 'back' ? <Delete size={16} /> : k}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Quick stake chips */}
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[1, 5, 10, 25, 50, 100, 500, 1000].map(v => (
+                      <button
+                        key={v}
+                        onClick={() => { setAmount(String(v)); setIsAmountOpen(false); }}
+                        className={`py-1.5 text-[11px] font-mono font-bold rounded-lg border transition-all ${
+                          amount === String(v)
+                            ? 'bg-[#b6ff3b]/15 text-[#b6ff3b] border-[#b6ff3b]/40'
+                            : 'bg-[#05080a] text-[#8e9ca5] border-[#182228] hover:text-white hover:bg-[#182228]'
+                        }`}
+                      >
+                        ${v}
                       </button>
                     ))}
                   </div>
@@ -467,15 +520,15 @@ export default function TerminalPage() {
 
           {/* Pinned Action Buttons Area */}
           <div className="p-5 border-t border-[#182228] bg-[#05080a] shrink-0 space-y-3 z-30 relative shadow-[0_-15px_15px_rgba(5,8,10,0.8)]">
-            <button 
-              onClick={() => handlePlaceTrade('HIGHER')} 
+            <button
+              onClick={() => handlePlaceTrade('HIGHER')}
               className="w-full bg-[#2bd98a] hover:bg-[#23b874] text-[#05080a] font-black py-4 rounded-full flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(43,217,138,0.2)] hover:shadow-[0_0_30px_rgba(43,217,138,0.35)] cursor-pointer"
             >
               <TrendingUp size={20} strokeWidth={2.5} />
               <span className="uppercase tracking-wider text-sm font-extrabold">Buy / Higher</span>
             </button>
-            <button 
-              onClick={() => handlePlaceTrade('LOWER')} 
+            <button
+              onClick={() => handlePlaceTrade('LOWER')}
               className="w-full bg-[#ff4d67] hover:bg-[#e63952] text-white font-black py-4 rounded-full flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(255,77,103,0.3)] hover:shadow-[0_0_30px_rgba(255,77,103,0.45)] cursor-pointer"
             >
               <TrendingDown size={20} strokeWidth={2.5} />
