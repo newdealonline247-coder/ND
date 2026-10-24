@@ -79,7 +79,8 @@ export default function TerminalPage() {
   const expiryRef = useRef<HTMLDivElement>(null);
   const amountRef = useRef<HTMLDivElement>(null);
   const timeBtnRef = useRef<HTMLButtonElement>(null);
-  const amountBtnRef = useRef<HTMLButtonElement>(null);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+  const popoverAmountInputRef = useRef<HTMLInputElement>(null);
   const timePopoverRef = useRef<HTMLDivElement>(null);
   const amountPopoverRef = useRef<HTMLDivElement>(null);
   const priceRef = useRef<number | null>(null);
@@ -197,17 +198,23 @@ export default function TerminalPage() {
 
   const handleNumpad = (val: string) => {
     if (val === 'back') {
-      setAmount(prev => prev.length > 1 ? prev.slice(0, -1) : '0');
+      setAmount(prev => (prev.length > 1 ? prev.slice(0, -1) : ''));
     } else if (val === '.') {
-      if (!amount.includes('.')) setAmount(prev => prev + '.');
+      if (!amount.includes('.')) setAmount(prev => (prev === '' ? '0.' : prev + '.'));
     } else {
-      setAmount(prev => prev === '0' ? val : prev + val);
+      setAmount(prev => (prev === '0' || prev === '' ? val : prev + val));
+    }
+  };
+
+  const handleAmountInputChange = (val: string) => {
+    if (/^\d*\.?\d*$/.test(val)) {
+      setAmount(val);
     }
   };
 
   const handlePlaceTrade = (type: 'HIGHER' | 'LOWER') => {
     const tradeAmount = parseFloat(amount);
-    if (!price || tradeAmount > balance || isNaN(tradeAmount) || tradeAmount <= 0) return;
+    if (!price || isNaN(tradeAmount) || tradeAmount <= 0 || tradeAmount > balance) return;
     setBalance(prev => prev - tradeAmount);
     setActiveTrades(prev => [{
       id: Math.random().toString(36).substr(2, 9), assetId: selectedAsset.id, assetName: selectedAsset.name, type,
@@ -232,6 +239,8 @@ export default function TerminalPage() {
     if (h > 0) return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
+
+  const numericAmount = parseFloat(amount) || 0;
 
   return (
     <div className="flex flex-col h-screen bg-[#05080a] text-[#ecf4ee] overflow-hidden font-sans select-none relative">
@@ -412,35 +421,50 @@ export default function TerminalPage() {
               </button>
             </div>
 
+            {/* Amount Field with Direct Keyboard Input Support */}
             <div className="space-y-4 shrink-0 relative" ref={amountRef}>
               <label className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest block">Amount</label>
-              <button
-                ref={amountBtnRef}
+              <div
                 onClick={() => {
-                  if (amountBtnRef.current) {
-                    const rect = amountBtnRef.current.getBoundingClientRect();
+                  if (amountInputRef.current) {
+                    const rect = amountInputRef.current.getBoundingClientRect();
                     setAmountPopoverPos({ top: rect.top, right: window.innerWidth - rect.left + 12 });
                   }
-                  setIsAmountOpen(!isAmountOpen);
+                  setIsAmountOpen(true);
                   setIsExpiryOpen(false);
                 }}
-                className={`w-full flex items-center justify-between bg-[#0a1114] border ${isAmountOpen ? 'border-[#b6ff3b]' : 'border-[#24323a] hover:border-[#b6ff3b]/40'} rounded-xl p-3 transition-colors`}
+                className={`w-full flex items-center justify-between bg-[#0a1114] border ${isAmountOpen ? 'border-[#b6ff3b]' : 'border-[#24323a] hover:border-[#b6ff3b]/40'} rounded-xl p-3 transition-colors cursor-text`}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full">
                   <span className="text-[#5c6a72] font-bold">$</span>
-                  <span className="font-mono font-bold text-white text-lg">{amount}</span>
+                  <input
+                    ref={amountInputRef}
+                    type="text"
+                    value={amount}
+                    onChange={(e) => handleAmountInputChange(e.target.value)}
+                    onFocus={() => {
+                      if (amountInputRef.current) {
+                        const rect = amountInputRef.current.getBoundingClientRect();
+                        setAmountPopoverPos({ top: rect.top, right: window.innerWidth - rect.left + 12 });
+                      }
+                      setIsAmountOpen(true);
+                      setIsExpiryOpen(false);
+                    }}
+                    placeholder="0"
+                    className="font-mono font-bold text-white text-lg bg-transparent border-none outline-none w-full"
+                  />
                 </div>
-              </button>
+              </div>
             </div>
 
             <div className="bg-[#0a1114] rounded-2xl p-4 border border-[#24323a] shrink-0">
               <div className="flex justify-between text-xs mb-1.5">
                 <span className="text-[#5c6a72] font-bold uppercase tracking-wider">Payout +{selectedAsset.payout}%</span>
-                <span className="text-[#b6ff3b] font-bold">+${((parseFloat(amount) || 0) * (selectedAsset.payout / 100)).toFixed(2)}</span>
+                <span className="text-[#b6ff3b] font-bold">+${(numericAmount * (selectedAsset.payout / 100)).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-[#5c6a72] font-bold uppercase tracking-wider">Total</span>
-                <span className="text-white font-bold">${((parseFloat(amount) || 0) * (1 + selectedAsset.payout / 100)).toFixed(2)}</span>
+                <span className="text-white font-bold">${(numericAmount * (1 + selectedAsset.payout / 100)).toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -465,7 +489,7 @@ export default function TerminalPage() {
         </div>
       </main>
 
-      {/* ── Fixed Position Popovers (Outside scroll box to avoid overflow clipping) ── */}
+      {/* ── Fixed Position Popovers ── */}
 
       {/* Time Popover */}
       {isExpiryOpen && (
@@ -521,18 +545,25 @@ export default function TerminalPage() {
         </div>
       )}
 
-      {/* Amount Popover */}
+      {/* Amount Popover with Sync Keyboard Input */}
       {isAmountOpen && (
         <div
           ref={amountPopoverRef}
           style={{ top: `${amountPopoverPos.top}px`, right: `${amountPopoverPos.right}px` }}
           className="fixed w-[260px] bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-2xl z-[9999] animate-in fade-in zoom-in-95 duration-150"
         >
-          {/* Display & multipliers */}
+          {/* Editable Display Box & Multipliers */}
           <div className="flex items-center gap-2 mb-3">
             <div className="flex-1 bg-[#05080a] border border-[#182228] rounded-xl px-3 py-2 flex items-center gap-1">
               <span className="text-[#5c6a72] font-bold text-sm">$</span>
-              <span className="text-white font-mono font-bold text-base tracking-tight">{amount}</span>
+              <input
+                ref={popoverAmountInputRef}
+                type="text"
+                value={amount}
+                onChange={(e) => handleAmountInputChange(e.target.value)}
+                placeholder="0"
+                className="text-white font-mono font-bold text-base tracking-tight bg-transparent border-none outline-none w-full"
+              />
             </div>
             <div className="flex flex-col gap-1">
               <button
