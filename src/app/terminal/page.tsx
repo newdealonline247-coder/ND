@@ -71,6 +71,9 @@ export default function TerminalPage() {
   const [tradeTab, setTradeTab] = useState<'active' | 'closed'>('active');
   const [serverTime, setServerTime] = useState(new Date());
 
+  // Offset between local PC clock and atomic exchange server time
+  const serverOffsetRef = useRef<number>(0);
+
   // Fixed position coordinates for popovers to prevent overflow clipping
   const [timePopoverPos, setTimePopoverPos] = useState({ top: 200, right: 336 });
   const [amountPopoverPos, setAmountPopoverPos] = useState({ top: 300, right: 336 });
@@ -91,6 +94,20 @@ export default function TerminalPage() {
     ASSETS.filter(a => a.name.toLowerCase().includes(assetSearch.toLowerCase()) || a.type.toLowerCase().includes(assetSearch.toLowerCase())),
     [assetSearch]
   );
+
+  // Initial Sync of Atomic Time from Binance Server API
+  useEffect(() => {
+    const syncAtomicServerTime = async () => {
+      try {
+        const res = await fetch('https://api.binance.com/api/v3/time');
+        const data = await res.json();
+        if (data.serverTime) {
+          serverOffsetRef.current = data.serverTime - Date.now();
+        }
+      } catch (e) {}
+    };
+    syncAtomicServerTime();
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -113,8 +130,9 @@ export default function TerminalPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Update header clock using atomic server time offset
   useEffect(() => {
-    const timer = setInterval(() => setServerTime(new Date()), 1000);
+    const timer = setInterval(() => setServerTime(new Date(Date.now() + serverOffsetRef.current)), 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -136,6 +154,10 @@ export default function TerminalPage() {
       ws = new WebSocket(`wss://stream.binance.com:9443/ws/${selectedAsset.id.toLowerCase()}@ticker`);
       ws.onmessage = (e) => {
         const data = JSON.parse(e.data);
+        if (data.E) {
+          // Re-calibrate server offset on every live tick
+          serverOffsetRef.current = data.E - Date.now();
+        }
         setPrice(prev => { if (prev !== null) setPrevPrice(prev); return parseFloat(data.c); });
       };
     } else {
@@ -148,6 +170,9 @@ export default function TerminalPage() {
       ws.onmessage = (e) => {
         const data = JSON.parse(e.data);
         if (data.type === 'trade') {
+          if (data.data && data.data[0] && data.data[0].t) {
+            serverOffsetRef.current = data.data[0].t - Date.now();
+          }
           setPrice(prev => { if (prev !== null) setPrevPrice(prev); return data.data[0].p; });
         }
       };
