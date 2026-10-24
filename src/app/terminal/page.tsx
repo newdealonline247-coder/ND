@@ -79,9 +79,8 @@ export default function TerminalPage() {
   const [amountPopoverPos, setAmountPopoverPos] = useState({ top: 300, right: 336 });
 
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const expiryRef = useRef<HTMLDivElement>(null);
-  const amountRef = useRef<HTMLDivElement>(null);
   const timeBtnRef = useRef<HTMLButtonElement>(null);
+  const amountBoxRef = useRef<HTMLDivElement>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
   const popoverAmountInputRef = useRef<HTMLInputElement>(null);
   const timePopoverRef = useRef<HTMLDivElement>(null);
@@ -109,19 +108,25 @@ export default function TerminalPage() {
     syncAtomicServerTime();
   }, []);
 
+  // Global Click Outside Handler for Dropdowns & Popovers
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
-      if (dropdownRef.current && !dropdownRef.current.contains(target)) setIsAssetOpen(false);
+      
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
+        setIsAssetOpen(false);
+      }
+
       if (
-        expiryRef.current && !expiryRef.current.contains(target) &&
-        timePopoverRef.current && !timePopoverRef.current.contains(target)
+        timePopoverRef.current && !timePopoverRef.current.contains(target) &&
+        timeBtnRef.current && !timeBtnRef.current.contains(target)
       ) {
         setIsExpiryOpen(false);
       }
+
       if (
-        amountRef.current && !amountRef.current.contains(target) &&
-        amountPopoverRef.current && !amountPopoverRef.current.contains(target)
+        amountPopoverRef.current && !amountPopoverRef.current.contains(target) &&
+        amountBoxRef.current && !amountBoxRef.current.contains(target)
       ) {
         setIsAmountOpen(false);
       }
@@ -401,7 +406,6 @@ export default function TerminalPage() {
             {tradeTab === 'closed' && tradeResults.length === 0 && <div className="text-center text-[#5c6a72] text-xs font-medium py-10 italic">No trade history.</div>}
             {tradeTab === 'closed' && tradeResults.map(res => (
               <div key={res.id} className="bg-[#05080a] border border-[#24323a] rounded-xl overflow-hidden shadow-sm p-3.5 space-y-2.5 transition-all hover:border-[#344652]">
-                {/* Header: Win/Loss status, Asset Name, Predicted Direction Badge, Time */}
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     {res.win ? <CheckCircle2 size={15} className="text-[#2bd98a] shrink-0" /> : <XCircle size={15} className="text-[#ff4d67] shrink-0" />}
@@ -418,7 +422,6 @@ export default function TerminalPage() {
                   <span className="font-mono text-[10px] text-[#5c6a72]">{new Date(res.closeTime).toLocaleTimeString()}</span>
                 </div>
 
-                {/* Open Price & Close Price Grid */}
                 <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-[#0a1114] border border-[#182228] font-mono text-[11px]">
                   <div>
                     <span className="text-[9px] font-bold uppercase tracking-wider text-[#5c6a72] block font-sans">Open Price</span>
@@ -430,7 +433,6 @@ export default function TerminalPage() {
                   </div>
                 </div>
 
-                {/* Invested Amount & Settlement Result */}
                 <div className="flex justify-between items-center text-xs font-mono pt-0.5">
                   <div className="flex flex-col">
                     <span className="text-[9px] text-[#5c6a72] uppercase font-bold font-sans">Invested</span>
@@ -454,7 +456,6 @@ export default function TerminalPage() {
 
         {/* Right Sidebar - Pinned Buttons Layout */}
         <div className="w-80 border-l border-[#182228] bg-[#05080a] flex flex-col z-20 relative shadow-[-10px_0_20px_rgba(0,0,0,0.2)]">
-          {/* Scrollable Center Settings Area */}
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5 no-scrollbar">
 
             <div className="bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-sm shrink-0">
@@ -464,7 +465,8 @@ export default function TerminalPage() {
               <div className={`text-3xl font-mono font-bold tracking-tight ${!price || !prevPrice || price === prevPrice ? 'text-[#b6ff3b]' : (price > prevPrice ? 'text-[#2bd98a]' : 'text-[#ff4d67]')}`}>{formatPrice(price)}</div>
             </div>
 
-            <div className="space-y-4 shrink-0 relative" ref={expiryRef}>
+            {/* Time Control */}
+            <div className="space-y-2 shrink-0 relative">
               <label className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest block">Time</label>
               <button
                 ref={timeBtnRef}
@@ -473,7 +475,7 @@ export default function TerminalPage() {
                     const rect = timeBtnRef.current.getBoundingClientRect();
                     setTimePopoverPos({ top: rect.top, right: window.innerWidth - rect.left + 12 });
                   }
-                  setIsExpiryOpen(!isExpiryOpen);
+                  setIsExpiryOpen(prev => !prev);
                   setIsAmountOpen(false);
                 }}
                 className={`w-full flex items-center justify-between bg-[#0a1114] border ${isExpiryOpen ? 'border-[#b6ff3b]' : 'border-[#24323a] hover:border-[#b6ff3b]/40'} rounded-xl p-3 transition-colors`}
@@ -483,16 +485,17 @@ export default function TerminalPage() {
               </button>
             </div>
 
-            {/* Amount Field with Direct Keyboard Input Support */}
-            <div className="space-y-4 shrink-0 relative" ref={amountRef}>
+            {/* Amount Field */}
+            <div className="space-y-2 shrink-0 relative">
               <label className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest block">Amount</label>
               <div
+                ref={amountBoxRef}
                 onClick={() => {
-                  if (amountInputRef.current) {
-                    const rect = amountInputRef.current.getBoundingClientRect();
+                  if (amountBoxRef.current) {
+                    const rect = amountBoxRef.current.getBoundingClientRect();
                     setAmountPopoverPos({ top: rect.top, right: window.innerWidth - rect.left + 12 });
                   }
-                  setIsAmountOpen(true);
+                  setIsAmountOpen(prev => !prev);
                   setIsExpiryOpen(false);
                 }}
                 className={`w-full flex items-center justify-between bg-[#0a1114] border ${isAmountOpen ? 'border-[#b6ff3b]' : 'border-[#24323a] hover:border-[#b6ff3b]/40'} rounded-xl p-3 transition-colors cursor-text`}
@@ -504,9 +507,9 @@ export default function TerminalPage() {
                     type="text"
                     value={amount}
                     onChange={(e) => handleAmountInputChange(e.target.value)}
-                    onFocus={() => {
-                      if (amountInputRef.current) {
-                        const rect = amountInputRef.current.getBoundingClientRect();
+                    onFocus={(e) => {
+                      if (amountBoxRef.current) {
+                        const rect = amountBoxRef.current.getBoundingClientRect();
                         setAmountPopoverPos({ top: rect.top, right: window.innerWidth - rect.left + 12 });
                       }
                       setIsAmountOpen(true);
@@ -531,7 +534,6 @@ export default function TerminalPage() {
             </div>
           </div>
 
-          {/* Pinned Action Buttons Area */}
           <div className="p-5 border-t border-[#182228] bg-[#05080a] shrink-0 space-y-3 z-30 relative shadow-[0_-15px_15px_rgba(5,8,10,0.8)]">
             <button
               onClick={() => handlePlaceTrade('HIGHER')}
@@ -600,7 +602,7 @@ export default function TerminalPage() {
         </div>
       )}
 
-      {/* Amount Popover with Sync Keyboard Input */}
+      {/* Amount Popover */}
       {isAmountOpen && (
         <div
           ref={amountPopoverRef}
