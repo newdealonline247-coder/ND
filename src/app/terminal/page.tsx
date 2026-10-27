@@ -386,7 +386,7 @@ export default function TerminalPage() {
 
           if (data && typeof data.price === "number" && data.price > 0) {
             setPrice((prev) => {
-              if (prev !== null) setPrevPrice(prev);
+              if (prev !== null && prev !== data.price && prev !== newP) setPrevPrice(prev);
               return data.price;
             });
           }
@@ -407,7 +407,7 @@ export default function TerminalPage() {
           if (data && data.p) {
             const newP = parseFloat(data.p);
             setPrice((prev) => {
-              if (prev !== null) setPrevPrice(prev);
+              if (prev !== null && prev !== data.price && prev !== newP) setPrevPrice(prev);
               return newP;
             });
           }
@@ -416,19 +416,7 @@ export default function TerminalPage() {
         }
       };
     } else {
-      pollInterval = setInterval(fetchLivePrice, 2000);
-
-      tickInterval = setInterval(() => {
-        setPrice((prev) => {
-          if (prev === null) return initialPrice;
-          const isJPY = selectedAsset.id.includes("JPY");
-          const isHighVal = prev > 100;
-          const deltaFactor = isHighVal ? 0.02 : isJPY ? 0.003 : 0.00003;
-          const change = (Math.random() - 0.498) * deltaFactor;
-          setPrevPrice(prev);
-          return prev + change;
-        });
-      }, 600);
+      pollInterval = setInterval(fetchLivePrice, 1000);
     }
 
     return () => {
