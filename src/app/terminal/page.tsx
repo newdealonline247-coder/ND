@@ -21,6 +21,7 @@ import {
   Key,
   LogIn,
   ShieldCheck,
+  Globe,
 } from "lucide-react";
 import TradingViewChart from "@/components/TradingViewChart";
 
@@ -166,6 +167,9 @@ export default function TerminalPage() {
   const [tradeTab, setTradeTab] = useState<"active" | "closed">("active");
   const [isAccountOpen, setIsAccountOpen] = useState(false);
 
+  // Server Time Clock State
+  const [serverTime, setServerTime] = useState<string>("");
+
   const [timePopoverPos, setTimePopoverPos] = useState({ top: 200, right: 336 });
   const [amountPopoverPos, setAmountPopoverPos] = useState({ top: 300, right: 336 });
 
@@ -178,6 +182,22 @@ export default function TerminalPage() {
   const accountModalRef = useRef<HTMLDivElement>(null);
   const loginModalRef = useRef<HTMLDivElement>(null);
   const priceRef = useRef<number | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // SERVER TIME CLOCK (UTC)
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      const h = now.getUTCHours().toString().padStart(2, "0");
+      const m = now.getUTCMinutes().toString().padStart(2, "0");
+      const s = now.getUTCSeconds().toString().padStart(2, "0");
+      setServerTime(`${h}:${m}:${s}`);
+    };
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     priceRef.current = price;
@@ -322,7 +342,7 @@ export default function TerminalPage() {
   };
 
   // ---------------------------------------------------------------------------
-  // LIVE PRICE ENGINE (EXACT MATCH FOR TRADINGVIEW)
+  // LIVE PRICE ENGINE
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const initialPrice = DEFAULT_PRICES[selectedAsset.id] ?? 1.0;
@@ -333,7 +353,6 @@ export default function TerminalPage() {
     let pollInterval: NodeJS.Timeout | null = null;
     let tickInterval: NodeJS.Timeout | null = null;
 
-    // Fetch live market quote immediately
     const fetchLivePrice = async () => {
       try {
         const res = await fetch(`/api/price?symbol=${selectedAsset.id}`);
@@ -371,10 +390,8 @@ export default function TerminalPage() {
         }
       };
     } else {
-      // Poll live market price route every 2 seconds
       pollInterval = setInterval(fetchLivePrice, 2000);
 
-      // Micro-ticks between polls for smooth live movement
       tickInterval = setInterval(() => {
         setPrice((prev) => {
           if (prev === null) return initialPrice;
@@ -947,7 +964,22 @@ export default function TerminalPage() {
         </div>
 
         <div className="w-80 border-l border-[#182228] bg-[#05080a] flex flex-col z-20 relative shadow-[-10px_0_20px_rgba(0,0,0,0.2)]">
-          <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5 no-scrollbar">
+          <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4 no-scrollbar">
+
+            {/* SERVER TIME DISPLAY */}
+            <div className="bg-[#0a1114] border border-[#24323a] rounded-2xl px-4 py-3 shadow-sm shrink-0 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Globe size={14} className="text-[#b6ff3b]" />
+                <span className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest">
+                  SERVER TIME (UTC)
+                </span>
+              </div>
+              <span className="font-mono font-bold text-sm text-[#ecf4ee] tracking-wider">
+                {serverTime || "00:00:00"}
+              </span>
+            </div>
+
+            {/* LIVE PRICE CARD */}
             <div className="bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-sm shrink-0">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest flex items-center gap-1.5">
