@@ -10,11 +10,25 @@ function TradingViewChartComponent({ symbol }: TradingViewChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
 
-    // Clear previous widget script
-    containerRef.current.innerHTML = "";
+    // Clear container
+    container.innerHTML = "";
 
+    // Outer wrapper
+    const wrapper = document.createElement("div");
+    wrapper.className = "tradingview-widget-container";
+    wrapper.style.height = "100%";
+    wrapper.style.width = "100%";
+
+    // Inner widget container
+    const widget = document.createElement("div");
+    widget.className = "tradingview-widget-container__widget";
+    widget.style.height = "100%";
+    widget.style.width = "100%";
+
+    // Embed Script
     const script = document.createElement("script");
     script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
     script.type = "text/javascript";
@@ -29,7 +43,7 @@ function TradingViewChartComponent({ symbol }: TradingViewChartProps) {
       style: "1",
       locale: "en",
       enable_publishing: false,
-      hide_side_toolbar: false, // ENABLES LEFT DRAWING TOOLBAR
+      hide_side_toolbar: false, // DRAWING TOOLBAR ENABLED
       allow_symbol_change: false,
       calendar: false,
       support_host: "https://www.tradingview.com",
@@ -37,16 +51,17 @@ function TradingViewChartComponent({ symbol }: TradingViewChartProps) {
       gridColor: "rgba(24, 34, 40, 0.4)",
       hide_top_toolbar: false,
       save_image: true,
-      container_id: "tradingview_chart_container",
     });
 
-    const widgetContainer = document.createElement("div");
-    widgetContainer.id = "tradingview_chart_container";
-    widgetContainer.style.height = "100%";
-    widgetContainer.style.width = "100%";
+    wrapper.appendChild(widget);
+    wrapper.appendChild(script);
+    container.appendChild(wrapper);
 
-    containerRef.current.appendChild(widgetContainer);
-    containerRef.current.appendChild(script);
+    return () => {
+      if (container) {
+        container.innerHTML = "";
+      }
+    };
   }, [symbol]);
 
   return (
