@@ -6,17 +6,17 @@ export async function GET(request: Request) {
 
   const cleanSymbol = symbol.replace("OANDA:", "").replace("BINANCE:", "").replace("_", "");
 
-  // Finnhub Fast Quote API (Real-time OANDA rates)
+  // 1. Finnhub Quote API (Real-time OANDA rates)
   try {
     const token = process.env.FINNHUB_API_KEY || "cu3p311r01qhk64s39g0";
-    let fhSymbol = `OANDA:${cleanSymbol.slice(0,3)}_${cleanSymbol.slice(3)}`;
+    let fhSymbol = `OANDA:${cleanSymbol.slice(0, 3)}_${cleanSymbol.slice(3)}`;
     if (cleanSymbol === "XAUUSD") fhSymbol = "OANDA:XAU_USD";
     if (cleanSymbol === "BTCUSDT") fhSymbol = "BINANCE:BTCUSDT";
     if (cleanSymbol === "ETHUSDT") fhSymbol = "BINANCE:ETHUSDT";
 
     const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${fhSymbol}&token=${token}`, {
       cache: "no-store",
-      headers: { "Accept": "application/json" }
+      headers: { Accept: "application/json" },
     });
 
     if (res.ok) {
@@ -32,12 +32,12 @@ export async function GET(request: Request) {
     console.error("Finnhub quote error", e);
   }
 
-  // Fallback to Yahoo Realtime Quote Summary
+  // 2. Fallback Yahoo Quote API
   try {
     const yahooSymbol = cleanSymbol === "XAUUSD" ? "XAUUSD=X" : `${cleanSymbol}=X`;
     const res = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yahooSymbol}`, {
       cache: "no-store",
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
     });
 
     if (res.ok) {

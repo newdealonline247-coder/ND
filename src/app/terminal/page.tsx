@@ -168,7 +168,6 @@ export default function TerminalPage() {
   const [tradeTab, setTradeTab] = useState<"active" | "closed">("active");
   const [isAccountOpen, setIsAccountOpen] = useState(false);
 
-  // NTP Server Time & 1M Candle Countdown State
   const timeOffsetRef = useRef<number>(0);
   const [serverTime, setServerTime] = useState<string>("");
   const [candleRemainingSec, setCandleRemainingSec] = useState<number>(60);
@@ -186,10 +185,174 @@ export default function TerminalPage() {
   const loginModalRef = useRef<HTMLDivElement>(null);
   const priceRef = useRef<number | null>(null);
 
-  // ---------------------------------------------------------------------------
-  // MILLISECOND-ACCURATE UTC SERVER TIME TICKER + CANDLE COUNTDOWN
-  // ---------------------------------------------------------------------------
-    useEffect(() => {
+  const currentBalance = accountType === "DEMO" ? demoBalance : realBalance;
+
+  useEffect(() => {
+    let timerId: NodeJS.Timeout;
+
+    const tick = () => {
+      const nowMs = Date.now() + timeOffsetRef.current;
+      const d = new Date(nowMs);
+
+      const h = d.getUTCHours().toString().padStart(2, "0");
+      const m = d.getUTCMinutes().toString().padStart(2, "0");
+      const s = d.getUTCSeconds().toString().padStart(2, "0");
+      setServerTime(`${h}:${m}:${s}`);
+
+      const currentSec = d.getUTCSeconds();
+      const remaining = 60 - currentSec;
+      setCandleRemainingSec(remaining === 60 ? 0 : remaining);
+
+      const delay = 1000 - (nowMs % 1000);
+      timerId = setTimeout(tick, delay);
+    };
+
+    tick();
+
+    return () => clearTimeout(timerId);
+  }, []);
+
+  useEffect(() => {
+    priceRef.current = price;
+  }, [price]);
+
+  useEffect(() => {
+    try {
+      const savedUser = localStorage.getItem("ec_prop_user");
+      const savedDemoBal = localStorage.getItem("ec_demo_balance");
+      const savedRealBal = localStorage.getItem("ec_real_balance");
+      const savedResults = localStorage.getItem("ec_trade_results");
+      const savedAccountType = localStorage.getItem("ec_account_type");
+
+      if (savedUser) {
+        const parsedUser = JSON.parse(savedUser) as PropFirmUser;
+        setPropUser(parsedUser);
+        if (savedRealBal !== null) {
+          const parsedReal = parseFloat(savedRealBal);
+          setRealBalance(Number.isNaN(parsedReal) ? parsedUser.accountSize : parsedReal);
+        } else {
+          setRealBalance(parsedUser.accountSize);
+        }
+        if (savedAccountType === "REAL") setAccountType("REAL");
+      }
+
+      if (savedDemoBal !== null) {
+        const parsedDemo = parseFloat(savedDemoBal);
+        if (!Number.isNaN(parsedDemo)) setDemoBalance(parsedDemo);
+      }
+
+      if (savedResults) {
+        const parsedResults = JSON.parse(savedResults);
+        if (Array.isArray(parsedResults)) setTradeResults(parsedResults);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setIsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    try {
+      localStorage.setItem("ec_demo_balance", demoBalance.toString());
+      localStorage.setItem("ec_real_balance", realBalance.toString());
+      localStorage.setItem("ec_trade_results", JSON.stringify(tradeResults));
+      localStorage.setItem("ec_account_type", accountType);
+      if (propUser) {
+        localStorage.setItem("ec_prop_user", JSON.stringify(propUser));
+      } else {
+        localStorage.removeItem("ec_prop_user");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [demoBalance, realBalance, tradeResults, propUser, accountType, isLoaded]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+
+      if (isAssetOpen && dropdownRef.current && !dropdownRef.current.contains(target)) {
+        setIsAssetOpen(false);
+      }
+
+      if (
+        isExpiryOpen &&
+        timePopoverRef.current &&
+        !timePopoverRef.current.contains(target) &&
+        timeBtnRef.current &&
+        !timeBtnRef.current.contains(target)
+      ) {
+        setIsExpiryOpen(false);
+      }
+
+      if (
+        isAmountOpen &&
+        amountPopoverRef.current &&
+        !amountPopoverRef.current.contains(target) &&
+        amountBoxRef.current &&
+        !amountBoxRef.current.contains(target)
+      ) {
+        setIsAmountOpen(false);
+      }
+
+      if (isAccountOpen && accountModalRef.current && !accountModalRef.current.contains(target)) {
+        setIsAccountOpen(false);
+      }
+
+      if (isLoginModalOpen && loginModalRef.current && !loginModalRef.current.contains(target)) {
+        setIsLoginModalOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isAssetOpen, isExpiryOpen, isAmountOpen, isAccountOpen, isLoginModalOpen]);
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    setIsLoggingIn(true);
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ login: loginInput, password: passwordInput }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setLoginError(data.error || "Failed to authenticate");
+        return;
+      }
+
+      const account = data.account as PropFirmUser;
+      setPropUser(account);
+      setRealBalance(account.accountSize);
+      setAccountType("REAL");
+      setIsLoginModalOpen(false);
+      setLoginInput("");
+      setPasswordInput("");
+      setIsAccountOpen(true);
+    } catch {
+      setLoginError("Network error. Please try again.");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleSignOut = () => {
+    setPropUser(null);
+    setAccountType("DEMO");
+    setRealBalance(0);
+    localStorage.removeItem("ec_prop_user");
+    localStorage.removeItem("ec_real_balance");
+    localStorage.setItem("ec_account_type", "DEMO");
+    setIsAccountOpen(false);
+  };
+
+  useEffect(() => {
     const initialPrice = DEFAULT_PRICES[selectedAsset.id] ?? 1.0;
     setPrice(initialPrice);
     setPrevPrice(null);
@@ -247,12 +410,11 @@ export default function TerminalPage() {
         }
       };
     } else {
-      // Stream Live OANDA Forex/Gold ticks via Finnhub WebSocket
       try {
         const token = "cu3p311r01qhk64s39g0";
         finnhubWs = new WebSocket(`wss://ws.finnhub.io?token=${token}`);
-        
-        let fhSymbol = `OANDA:${selectedAsset.id.slice(0,3)}_${selectedAsset.id.slice(3)}`;
+
+        let fhSymbol = `OANDA:${selectedAsset.id.slice(0, 3)}_${selectedAsset.id.slice(3)}`;
         if (selectedAsset.id === "XAUUSD") fhSymbol = "OANDA:XAU_USD";
 
         finnhubWs.onopen = () => {
@@ -280,22 +442,18 @@ export default function TerminalPage() {
         console.error("Finnhub WS connection error", wsErr);
       }
 
-      // 1.5s REST Backup Poll
       pollInterval = setInterval(fetchLivePrice, 1500);
 
-      // 350ms Sub-Pip Tick Generator to keep live price responsive & active
       tickInterval = setInterval(() => {
         setPrice((prev) => {
           const current = prev ?? benchmarkPrice;
           const isJPY = selectedAsset.id.includes("JPY");
           const isGold = selectedAsset.id === "XAUUSD";
           const step = isGold ? 0.05 : isJPY ? 0.003 : 0.00002;
-          
-          // Tight fluctuation around real market benchmark
+
           const delta = (Math.random() - 0.495) * step;
           const nextPrice = current + delta;
 
-          // Prevent drift away from benchmark price level
           if (Math.abs(nextPrice - benchmarkPrice) > step * 5) {
             return benchmarkPrice;
           }
@@ -381,7 +539,9 @@ export default function TerminalPage() {
 
   const handlePlaceTrade = (type: "HIGHER" | "LOWER") => {
     const tradeAmount = parseFloat(amount);
-    if (!price || Number.isNaN(tradeAmount) || tradeAmount <= 0 || tradeAmount > currentBalance) {
+    const balanceToUse = accountType === "DEMO" ? demoBalance : realBalance;
+
+    if (!price || Number.isNaN(tradeAmount) || tradeAmount <= 0 || tradeAmount > balanceToUse) {
       return;
     }
 
@@ -723,7 +883,7 @@ export default function TerminalPage() {
                   >
                     <div className="p-3">
                       <div className="flex justify-between items-center mb-2.5">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2">
                           <span className="font-bold text-xs">{trade.assetName}</span>
                           <span
                             className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded ${
@@ -882,7 +1042,6 @@ export default function TerminalPage() {
         <div className="w-80 border-l border-[#182228] bg-[#05080a] flex flex-col z-20 relative shadow-[-10px_0_20px_rgba(0,0,0,0.2)]">
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4 no-scrollbar">
 
-            {/* SERVER TIME & 1M CANDLE COUNTDOWN PANEL */}
             <div className="bg-[#0a1114] border border-[#24323a] rounded-2xl p-3 shadow-sm shrink-0 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-1.5">
@@ -911,7 +1070,6 @@ export default function TerminalPage() {
               </div>
             </div>
 
-            {/* LIVE PRICE CARD */}
             <div className="bg-[#0a1114] border border-[#24323a] rounded-2xl p-4 shadow-sm shrink-0">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest flex items-center gap-1.5">
