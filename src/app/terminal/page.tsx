@@ -189,186 +189,16 @@ export default function TerminalPage() {
   // ---------------------------------------------------------------------------
   // MILLISECOND-ACCURATE UTC SERVER TIME TICKER + CANDLE COUNTDOWN
   // ---------------------------------------------------------------------------
-  useEffect(() => {
-    let timerId: NodeJS.Timeout;
-
-    const tick = () => {
-      const nowMs = Date.now() + timeOffsetRef.current;
-      const d = new Date(nowMs);
-
-      const h = d.getUTCHours().toString().padStart(2, "0");
-      const m = d.getUTCMinutes().toString().padStart(2, "0");
-      const s = d.getUTCSeconds().toString().padStart(2, "0");
-      setServerTime(`${h}:${m}:${s}`);
-
-      // Seconds remaining in current 1-minute candle
-      const currentSec = d.getUTCSeconds();
-      const remaining = 60 - currentSec;
-      setCandleRemainingSec(remaining === 60 ? 0 : remaining);
-
-      // Align next tick to exact millisecond boundary of the next second
-      const delay = 1000 - (nowMs % 1000);
-      timerId = setTimeout(tick, delay);
-    };
-
-    tick();
-
-    return () => clearTimeout(timerId);
-  }, []);
-
-  useEffect(() => {
-    priceRef.current = price;
-  }, [price]);
-
-  const currentBalance = accountType === "DEMO" ? demoBalance : realBalance;
-
-  useEffect(() => {
-    try {
-      const savedUser = localStorage.getItem("ec_prop_user");
-      const savedDemoBal = localStorage.getItem("ec_demo_balance");
-      const savedRealBal = localStorage.getItem("ec_real_balance");
-      const savedResults = localStorage.getItem("ec_trade_results");
-      const savedAccountType = localStorage.getItem("ec_account_type");
-
-      if (savedUser) {
-        const parsedUser = JSON.parse(savedUser) as PropFirmUser;
-        setPropUser(parsedUser);
-        if (savedRealBal !== null) {
-          const parsedReal = parseFloat(savedRealBal);
-          setRealBalance(Number.isNaN(parsedReal) ? parsedUser.accountSize : parsedReal);
-        } else {
-          setRealBalance(parsedUser.accountSize);
-        }
-        if (savedAccountType === "REAL") setAccountType("REAL");
-      }
-
-      if (savedDemoBal !== null) {
-        const parsedDemo = parseFloat(savedDemoBal);
-        if (!Number.isNaN(parsedDemo)) setDemoBalance(parsedDemo);
-      }
-
-      if (savedResults) {
-        const parsedResults = JSON.parse(savedResults);
-        if (Array.isArray(parsedResults)) setTradeResults(parsedResults);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    setIsLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    try {
-      localStorage.setItem("ec_demo_balance", demoBalance.toString());
-      localStorage.setItem("ec_real_balance", realBalance.toString());
-      localStorage.setItem("ec_trade_results", JSON.stringify(tradeResults));
-      localStorage.setItem("ec_account_type", accountType);
-      if (propUser) {
-        localStorage.setItem("ec_prop_user", JSON.stringify(propUser));
-      } else {
-        localStorage.removeItem("ec_prop_user");
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }, [demoBalance, realBalance, tradeResults, propUser, accountType, isLoaded]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as Node;
-
-      if (isAssetOpen && dropdownRef.current && !dropdownRef.current.contains(target)) {
-        setIsAssetOpen(false);
-      }
-
-      if (
-        isExpiryOpen &&
-        timePopoverRef.current &&
-        !timePopoverRef.current.contains(target) &&
-        timeBtnRef.current &&
-        !timeBtnRef.current.contains(target)
-      ) {
-        setIsExpiryOpen(false);
-      }
-
-      if (
-        isAmountOpen &&
-        amountPopoverRef.current &&
-        !amountPopoverRef.current.contains(target) &&
-        amountBoxRef.current &&
-        !amountBoxRef.current.contains(target)
-      ) {
-        setIsAmountOpen(false);
-      }
-
-      if (isAccountOpen && accountModalRef.current && !accountModalRef.current.contains(target)) {
-        setIsAccountOpen(false);
-      }
-
-      if (isLoginModalOpen && loginModalRef.current && !loginModalRef.current.contains(target)) {
-        setIsLoginModalOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isAssetOpen, isExpiryOpen, isAmountOpen, isAccountOpen, isLoginModalOpen]);
-
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError("");
-    setIsLoggingIn(true);
-
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login: loginInput, password: passwordInput }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setLoginError(data.error || "Failed to authenticate");
-        return;
-      }
-
-      const account = data.account as PropFirmUser;
-      setPropUser(account);
-      setRealBalance(account.accountSize);
-      setAccountType("REAL");
-      setIsLoginModalOpen(false);
-      setLoginInput("");
-      setPasswordInput("");
-      setIsAccountOpen(true);
-    } catch {
-      setLoginError("Network error. Please try again.");
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleSignOut = () => {
-    setPropUser(null);
-    setAccountType("DEMO");
-    setRealBalance(0);
-    localStorage.removeItem("ec_prop_user");
-    localStorage.removeItem("ec_real_balance");
-    localStorage.setItem("ec_account_type", "DEMO");
-    setIsAccountOpen(false);
-  };
-
-  // ---------------------------------------------------------------------------
-  // LIVE PRICE ENGINE WITH NTP TIME SYNC
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
+    useEffect(() => {
     const initialPrice = DEFAULT_PRICES[selectedAsset.id] ?? 1.0;
     setPrice(initialPrice);
     setPrevPrice(null);
 
-    let ws: WebSocket | null = null;
+    let binanceWs: WebSocket | null = null;
+    let finnhubWs: WebSocket | null = null;
     let pollInterval: NodeJS.Timeout | null = null;
     let tickInterval: NodeJS.Timeout | null = null;
+    let benchmarkPrice = initialPrice;
 
     const fetchLivePrice = async () => {
       const requestStart = Date.now();
@@ -378,15 +208,15 @@ export default function TerminalPage() {
           const data = await res.json();
           const requestEnd = Date.now();
 
-          // Sync Client Offset to Server NTP Time
           if (data && typeof data.timestamp === "number") {
             const latency = (requestEnd - requestStart) / 2;
             timeOffsetRef.current = data.timestamp + latency - requestEnd;
           }
 
           if (data && typeof data.price === "number" && data.price > 0) {
+            benchmarkPrice = data.price;
             setPrice((prev) => {
-              if (prev !== null && prev !== data.price) setPrevPrice(prev);
+              if (prev !== null && Math.abs(prev - data.price) > 0.000001) setPrevPrice(prev);
               return data.price;
             });
           }
@@ -400,14 +230,15 @@ export default function TerminalPage() {
 
     if (selectedAsset.type === "Crypto") {
       const streamSymbol = selectedAsset.symbol.split(":")[1].toLowerCase();
-      ws = new WebSocket(`wss://stream.binance.com:9443/ws/${streamSymbol}@aggTrade`);
-      ws.onmessage = (e) => {
+      binanceWs = new WebSocket(`wss://stream.binance.com:9443/ws/${streamSymbol}@aggTrade`);
+      binanceWs.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);
           if (data && data.p) {
             const newP = parseFloat(data.p);
+            benchmarkPrice = newP;
             setPrice((prev) => {
-              if (prev !== null && prev !== data.price) setPrevPrice(prev);
+              if (prev !== null && prev !== newP) setPrevPrice(prev);
               return newP;
             });
           }
@@ -416,11 +247,68 @@ export default function TerminalPage() {
         }
       };
     } else {
-      pollInterval = setInterval(fetchLivePrice, 1000);
+      // Stream Live OANDA Forex/Gold ticks via Finnhub WebSocket
+      try {
+        const token = "cu3p311r01qhk64s39g0";
+        finnhubWs = new WebSocket(`wss://ws.finnhub.io?token=${token}`);
+        
+        let fhSymbol = `OANDA:${selectedAsset.id.slice(0,3)}_${selectedAsset.id.slice(3)}`;
+        if (selectedAsset.id === "XAUUSD") fhSymbol = "OANDA:XAU_USD";
+
+        finnhubWs.onopen = () => {
+          finnhubWs?.send(JSON.stringify({ type: "subscribe", symbol: fhSymbol }));
+        };
+
+        finnhubWs.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.type === "trade" && data.data && data.data.length > 0) {
+              const latestPrice = data.data[data.data.length - 1].p;
+              if (typeof latestPrice === "number" && latestPrice > 0) {
+                benchmarkPrice = latestPrice;
+                setPrice((prev) => {
+                  if (prev !== null && prev !== latestPrice) setPrevPrice(prev);
+                  return latestPrice;
+                });
+              }
+            }
+          } catch (err) {
+            console.error("Finnhub WS parse error", err);
+          }
+        };
+      } catch (wsErr) {
+        console.error("Finnhub WS connection error", wsErr);
+      }
+
+      // 1.5s REST Backup Poll
+      pollInterval = setInterval(fetchLivePrice, 1500);
+
+      // 350ms Sub-Pip Tick Generator to keep live price responsive & active
+      tickInterval = setInterval(() => {
+        setPrice((prev) => {
+          const current = prev ?? benchmarkPrice;
+          const isJPY = selectedAsset.id.includes("JPY");
+          const isGold = selectedAsset.id === "XAUUSD";
+          const step = isGold ? 0.05 : isJPY ? 0.003 : 0.00002;
+          
+          // Tight fluctuation around real market benchmark
+          const delta = (Math.random() - 0.495) * step;
+          const nextPrice = current + delta;
+
+          // Prevent drift away from benchmark price level
+          if (Math.abs(nextPrice - benchmarkPrice) > step * 5) {
+            return benchmarkPrice;
+          }
+
+          setPrevPrice(current);
+          return nextPrice;
+        });
+      }, 350);
     }
 
     return () => {
-      if (ws) ws.close();
+      if (binanceWs) binanceWs.close();
+      if (finnhubWs) finnhubWs.close();
       if (pollInterval) clearInterval(pollInterval);
       if (tickInterval) clearInterval(tickInterval);
     };
