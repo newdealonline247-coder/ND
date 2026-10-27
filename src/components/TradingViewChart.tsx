@@ -1,22 +1,25 @@
 ﻿"use client";
 
-import React, { useEffect, useRef, memo } from 'react';
+import React, { useEffect, useRef, memo } from "react";
 
 interface TradingViewChartProps {
   symbol: string;
 }
 
-function TradingViewChart({ symbol }: TradingViewChartProps) {
+function TradingViewChartComponent({ symbol }: TradingViewChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    containerRef.current.innerHTML = '';
 
-    const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
-    script.type = 'text/javascript';
+    // Clear previous widget script
+    containerRef.current.innerHTML = "";
+
+    const script = document.createElement("script");
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    script.type = "text/javascript";
     script.async = true;
+
     script.innerHTML = JSON.stringify({
       autosize: true,
       symbol: symbol,
@@ -26,21 +29,32 @@ function TradingViewChart({ symbol }: TradingViewChartProps) {
       style: "1",
       locale: "en",
       enable_publishing: false,
-      backgroundColor: "#05080a",
-      gridColor: "#182228",
+      hide_side_toolbar: false, // ENABLES LEFT DRAWING TOOLBAR
       allow_symbol_change: false,
       calendar: false,
-      support_host: "https://www.tradingview.com"
+      support_host: "https://www.tradingview.com",
+      backgroundColor: "#05080a",
+      gridColor: "rgba(24, 34, 40, 0.4)",
+      hide_top_toolbar: false,
+      save_image: true,
+      container_id: "tradingview_chart_container",
     });
 
+    const widgetContainer = document.createElement("div");
+    widgetContainer.id = "tradingview_chart_container";
+    widgetContainer.style.height = "100%";
+    widgetContainer.style.width = "100%";
+
+    containerRef.current.appendChild(widgetContainer);
     containerRef.current.appendChild(script);
   }, [symbol]);
 
   return (
-    <div className="tradingview-widget-container h-full w-full" ref={containerRef}>
-      <div className="tradingview-widget-container__widget h-full w-full" />
-    </div>
+    <div
+      ref={containerRef}
+      className="w-full h-full bg-[#05080a] relative overflow-hidden"
+    />
   );
 }
 
-export default memo(TradingViewChart);
+export default memo(TradingViewChartComponent);
