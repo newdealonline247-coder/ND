@@ -386,7 +386,7 @@ export default function TerminalPage() {
 
           if (data && typeof data.price === "number" && data.price > 0) {
             setPrice((prev) => {
-              if (prev !== null && prev !== data.price && prev !== newP) setPrevPrice(prev);
+              if (prev !== null && prev !== data.price) setPrevPrice(prev);
               return data.price;
             });
           }
@@ -407,7 +407,7 @@ export default function TerminalPage() {
           if (data && data.p) {
             const newP = parseFloat(data.p);
             setPrice((prev) => {
-              if (prev !== null && prev !== data.price && prev !== newP) setPrevPrice(prev);
+              if (prev !== null && prev !== data.price) setPrevPrice(prev);
               return newP;
             });
           }
