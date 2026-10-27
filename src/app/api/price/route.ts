@@ -56,6 +56,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get("symbol") || "EURUSD";
   const yahooSymbol = SYMBOL_MAP[symbol] || `${symbol}=X`;
+  const timestamp = Date.now();
 
   try {
     const res = await fetch(
@@ -73,7 +74,7 @@ export async function GET(request: Request) {
       const meta = data?.chart?.result?.[0]?.meta;
       const price = meta?.regularMarketPrice || meta?.chartPreviousClose;
       if (typeof price === "number" && price > 0) {
-        return NextResponse.json({ symbol, price });
+        return NextResponse.json({ symbol, price, timestamp });
       }
     }
   } catch (e) {
@@ -81,5 +82,5 @@ export async function GET(request: Request) {
   }
 
   const fallbackPrice = BASELINE_PRICES[symbol] || 1.0;
-  return NextResponse.json({ symbol, price: fallbackPrice });
+  return NextResponse.json({ symbol, price: fallbackPrice, timestamp });
 }

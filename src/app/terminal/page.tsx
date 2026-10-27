@@ -22,6 +22,7 @@ import {
   LogIn,
   ShieldCheck,
   Globe,
+  Timer,
 } from "lucide-react";
 import TradingViewChart from "@/components/TradingViewChart";
 
@@ -167,8 +168,10 @@ export default function TerminalPage() {
   const [tradeTab, setTradeTab] = useState<"active" | "closed">("active");
   const [isAccountOpen, setIsAccountOpen] = useState(false);
 
-  // Server Time Clock State
+  // NTP Server Time & 1M Candle Countdown State
+  const timeOffsetRef = useRef<number>(0);
   const [serverTime, setServerTime] = useState<string>("");
+  const [candleRemainingSec, setCandleRemainingSec] = useState<number>(60);
 
   const [timePopoverPos, setTimePopoverPos] = useState({ top: 200, right: 336 });
   const [amountPopoverPos, setAmountPopoverPos] = useState({ top: 300, right: 336 });
@@ -184,19 +187,33 @@ export default function TerminalPage() {
   const priceRef = useRef<number | null>(null);
 
   // ---------------------------------------------------------------------------
-  // SERVER TIME CLOCK (UTC)
+  // MILLISECOND-ACCURATE UTC SERVER TIME TICKER + CANDLE COUNTDOWN
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    const updateClock = () => {
-      const now = new Date();
-      const h = now.getUTCHours().toString().padStart(2, "0");
-      const m = now.getUTCMinutes().toString().padStart(2, "0");
-      const s = now.getUTCSeconds().toString().padStart(2, "0");
+    let timerId: NodeJS.Timeout;
+
+    const tick = () => {
+      const nowMs = Date.now() + timeOffsetRef.current;
+      const d = new Date(nowMs);
+
+      const h = d.getUTCHours().toString().padStart(2, "0");
+      const m = d.getUTCMinutes().toString().padStart(2, "0");
+      const s = d.getUTCSeconds().toString().padStart(2, "0");
       setServerTime(`${h}:${m}:${s}`);
+
+      // Seconds remaining in current 1-minute candle
+      const currentSec = d.getUTCSeconds();
+      const remaining = 60 - currentSec;
+      setCandleRemainingSec(remaining === 60 ? 0 : remaining);
+
+      // Align next tick to exact millisecond boundary of the next second
+      const delay = 1000 - (nowMs % 1000);
+      timerId = setTimeout(tick, delay);
     };
-    updateClock();
-    const interval = setInterval(updateClock, 1000);
-    return () => clearInterval(interval);
+
+    tick();
+
+    return () => clearTimeout(timerId);
   }, []);
 
   useEffect(() => {
@@ -342,7 +359,7 @@ export default function TerminalPage() {
   };
 
   // ---------------------------------------------------------------------------
-  // LIVE PRICE ENGINE
+  // LIVE PRICE ENGINE WITH NTP TIME SYNC
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const initialPrice = DEFAULT_PRICES[selectedAsset.id] ?? 1.0;
@@ -354,10 +371,19 @@ export default function TerminalPage() {
     let tickInterval: NodeJS.Timeout | null = null;
 
     const fetchLivePrice = async () => {
+      const requestStart = Date.now();
       try {
         const res = await fetch(`/api/price?symbol=${selectedAsset.id}`);
         if (res.ok) {
           const data = await res.json();
+          const requestEnd = Date.now();
+
+          // Sync Client Offset to Server NTP Time
+          if (data && typeof data.timestamp === "number") {
+            const latency = (requestEnd - requestStart) / 2;
+            timeOffsetRef.current = data.timestamp + latency - requestEnd;
+          }
+
           if (data && typeof data.price === "number" && data.price > 0) {
             setPrice((prev) => {
               if (prev !== null) setPrevPrice(prev);
@@ -966,17 +992,33 @@ export default function TerminalPage() {
         <div className="w-80 border-l border-[#182228] bg-[#05080a] flex flex-col z-20 relative shadow-[-10px_0_20px_rgba(0,0,0,0.2)]">
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4 no-scrollbar">
 
-            {/* SERVER TIME DISPLAY */}
-            <div className="bg-[#0a1114] border border-[#24323a] rounded-2xl px-4 py-3 shadow-sm shrink-0 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Globe size={14} className="text-[#b6ff3b]" />
-                <span className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-widest">
-                  SERVER TIME (UTC)
+            {/* SERVER TIME & 1M CANDLE COUNTDOWN PANEL */}
+            <div className="bg-[#0a1114] border border-[#24323a] rounded-2xl p-3 shadow-sm shrink-0 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5">
+                  <Globe size={13} className="text-[#b6ff3b]" />
+                  <span className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-wider">
+                    UTC TIME
+                  </span>
+                </div>
+                <span className="font-mono font-bold text-sm text-[#ecf4ee]">
+                  {serverTime || "00:00:00"}
                 </span>
               </div>
-              <span className="font-mono font-bold text-sm text-[#ecf4ee] tracking-wider">
-                {serverTime || "00:00:00"}
-              </span>
+
+              <div className="h-[1px] bg-[#182228] w-full" />
+
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5">
+                  <Timer size={13} className="text-[#2bd98a]" />
+                  <span className="text-[10px] font-bold text-[#5c6a72] uppercase tracking-wider">
+                    NEXT CANDLE
+                  </span>
+                </div>
+                <span className="font-mono font-bold text-xs text-[#2bd98a] bg-[#2bd98a]/10 px-2 py-0.5 rounded border border-[#2bd98a]/20">
+                  00:{candleRemainingSec.toString().padStart(2, "0")}
+                </span>
+              </div>
             </div>
 
             {/* LIVE PRICE CARD */}
