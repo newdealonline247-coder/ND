@@ -96,11 +96,9 @@ const ASSETS: Asset[] = [
   { id: "XAUUSD", name: "GOLD", type: "Commodity", symbol: "OANDA:XAUUSD", payout: 90 },
 ];
 
-const FINNHUB_KEY = "cqslcrpr01qj9a43lb7gcqslcrpr01qj9a43lb80";
-
 const DEFAULT_PRICES: Record<string, number> = {
   EURUSD: 1.11572,
-  GBPUSD: 1.29450,
+  GBPUSD: 1.33207,
   GBPAUD: 1.96750,
   USDJPY: 154.230,
   USDCHF: 0.86510,
@@ -123,16 +121,6 @@ const DEFAULT_PRICES: Record<string, number> = {
   ETHUSDT: 3350.25,
   XAUUSD: 2685.50,
 };
-
-function getFinnhubSymbol(symbol: string) {
-  if (symbol.startsWith("OANDA:")) {
-    const raw = symbol.replace("OANDA:", "");
-    if (raw.length === 6) {
-      return `OANDA:${raw.slice(0, 3)}_${raw.slice(3)}`;
-    }
-  }
-  return symbol;
-}
 
 function LogoMark() {
   return (
@@ -334,7 +322,7 @@ export default function TerminalPage() {
   };
 
   // ---------------------------------------------------------------------------
-  // LIVE PRICE ENGINE (BINANCE + FINNHUB REST/WS + DYNAMIC FALLBACK)
+  // LIVE PRICE ENGINE (EXACT MATCH FOR TRADINGVIEW)
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const initialPrice = DEFAULT_PRICES[selectedAsset.id] ?? 1.0;
@@ -342,7 +330,28 @@ export default function TerminalPage() {
     setPrevPrice(null);
 
     let ws: WebSocket | null = null;
-    let fallbackInterval: NodeJS.Timeout | null = null;
+    let pollInterval: NodeJS.Timeout | null = null;
+    let tickInterval: NodeJS.Timeout | null = null;
+
+    // Fetch live market quote immediately
+    const fetchLivePrice = async () => {
+      try {
+        const res = await fetch(`/api/price?symbol=${selectedAsset.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data.price === "number" && data.price > 0) {
+            setPrice((prev) => {
+              if (prev !== null) setPrevPrice(prev);
+              return data.price;
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Fetch price error:", err);
+      }
+    };
+
+    fetchLivePrice();
 
     if (selectedAsset.type === "Crypto") {
       const streamSymbol = selectedAsset.symbol.split(":")[1].toLowerCase();
@@ -362,63 +371,27 @@ export default function TerminalPage() {
         }
       };
     } else {
-      const fhSymbol = getFinnhubSymbol(selectedAsset.symbol);
+      // Poll live market price route every 2 seconds
+      pollInterval = setInterval(fetchLivePrice, 2000);
 
-      // Fetch immediate REST quote for accurate live starting price
-      fetch(`https://finnhub.io/api/v1/quote?symbol=${fhSymbol}&token=${FINNHUB_KEY}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && typeof data.c === "number" && data.c > 0) {
-            setPrice((prev) => {
-              if (prev !== null) setPrevPrice(prev);
-              return data.c;
-            });
-          }
-        })
-        .catch(() => {});
-
-      // Finnhub WebSocket with formatted symbol
-      ws = new WebSocket(`wss://ws.finnhub.io?token=${FINNHUB_KEY}`);
-      ws.onopen = () => {
-        ws?.send(
-          JSON.stringify({
-            type: "subscribe",
-            symbol: fhSymbol,
-          }),
-        );
-      };
-      ws.onmessage = (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data.type === "trade" && data.data?.[0]?.p != null) {
-            const newP = data.data[0].p;
-            setPrice((prev) => {
-              if (prev !== null) setPrevPrice(prev);
-              return newP;
-            });
-          }
-        } catch (err) {
-          console.error("Finnhub WS error", err);
-        }
-      };
-
-      // Continuous micro-tick engine for continuous live movement
-      fallbackInterval = setInterval(() => {
+      // Micro-ticks between polls for smooth live movement
+      tickInterval = setInterval(() => {
         setPrice((prev) => {
           if (prev === null) return initialPrice;
           const isJPY = selectedAsset.id.includes("JPY");
           const isHighVal = prev > 100;
-          const deltaFactor = isHighVal ? 0.05 : isJPY ? 0.005 : 0.00005;
+          const deltaFactor = isHighVal ? 0.02 : isJPY ? 0.003 : 0.00003;
           const change = (Math.random() - 0.498) * deltaFactor;
           setPrevPrice(prev);
           return prev + change;
         });
-      }, 750);
+      }, 600);
     }
 
     return () => {
       if (ws) ws.close();
-      if (fallbackInterval) clearInterval(fallbackInterval);
+      if (pollInterval) clearInterval(pollInterval);
+      if (tickInterval) clearInterval(tickInterval);
     };
   }, [selectedAsset]);
 
@@ -1371,7 +1344,7 @@ export default function TerminalPage() {
                     setAmount((prev) => (prev === "0" ? n.toString() : prev + n));
                   }
                 }}
-                className="py-3 rounded-xl bg-[#05080a] border border-[#182228] text-white font-mono text-lg hover:bg-[#182228] transition-colors"
+                className="py-3 rounded-xl bg-[#05080a] border border-[#182228] text-[#ecf4ee] font-mono text-lg hover:bg-[#182228] transition-colors"
               >
                 {n}
               </button>
