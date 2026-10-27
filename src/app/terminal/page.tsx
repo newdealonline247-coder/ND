@@ -849,6 +849,20 @@ export default function TerminalPage() {
                       <div className="flex justify-between items-center mb-2.5">
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold text-xs">{trade.assetName}</span>
+                          <span
+                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded ${
+                              trade.type === "HIGHER"
+                                ? "bg-[#2bd98a]/15 text-[#2bd98a] border border-[#2bd98a]/30"
+                                : "bg-[#ff4d67]/15 text-[#ff4d67] border border-[#ff4d67]/30"
+                            }`}
+                          >
+                            {trade.type === "HIGHER" ? (
+                              <TrendingUp size={11} />
+                            ) : (
+                              <TrendingDown size={11} />
+                            )}
+                            {trade.type}
+                          </span>
                         </div>
                         <span className="font-mono text-xs font-bold text-white bg-[#182228] px-2 py-0.5 rounded">
                           {formatTimeStr(trade.timeRemaining)}
